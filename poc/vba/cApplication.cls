@@ -7,11 +7,13 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
+
+Option Explicit
 'Controller: Application
 'Description: The main controller of all interfaces and classes.
-Option Explicit
 
 Private WithEvents vMain As vMain
+Attribute vMain.VB_VarHelpID = -1
 Private cMapping As cMapping
 Private AccessDAL As AccessDAL
 Private GLEntity As GLEntity
@@ -61,17 +63,12 @@ End Sub
 Private Sub vMain_GetTableNames()
     ' Update database table names to vMain.ListTable
 End Sub
-Private Sub PreviewTable(ByVal tableName As String)
+Private Sub PreviewTable()
     ' Let user preview specific table, with maximum 1000 records.
-    Const MAX As Long = 1000  ' limit should be define by PrevieTable,
-    Call ImportService.LoadToExcel(accessDbPath, tableName, worksheetName, MAX_ROWS_TO_SHOW)
     
 End Sub
 Private Sub ImportCSV(ByVal importType As String)
     ' 控制器：協調 CSV 匯入流程 (GL 或 TB)
-    ' 先將CSV匯入至資料庫(ImportService.ImportToAccess)
-    ' 再將匯入的資料表預覽(...PreviewTable)
-    ' 因此這裡不會呼叫 ImportService.LoadToExcel，而是由 PreviewTable 處理
     Dim csvFilePath As String
     Dim accessDbPath As String
     Dim tableName As String

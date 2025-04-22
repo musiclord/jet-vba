@@ -7,15 +7,16 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
+
+Option Explicit
 'Controller: Mapping
 'Description: Controller of vMapping.
-Option Explicit
 
-Private WithEvents vMapping As vMapping
-Attribute vMapping.VB_VarHelpID = -1
+Private WithEvents vMApping As vMApping
+Attribute vMApping.VB_VarHelpID = -1
 
 Private Sub Class_Initialize()
-    Set vMapping = New vMapping
+    Set vMApping = New vMApping
 End Sub
 
 Private Sub vMapping_DoConfirm()
@@ -25,7 +26,7 @@ Private Sub vMapping_DoConfirm()
 End Sub
 
 Private Sub vMapping_DoExit()
-    Call vMapping.Hide
-    Unload vMapping
-    Set vMapping = Nothing
+    Call vMApping.Hide
+    Unload vMApping
+    Set vMApping = Nothing
 End Sub

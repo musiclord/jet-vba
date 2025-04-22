@@ -7,9 +7,10 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
-'Model: Import Service
-'Description: Handle any data import logics and uses AccessDAL for database operation.
+
 Option Explicit
+ 'Model: Import Service
+'Description: Handle any data import logics and uses AccessDAL for database operation.
 
 Private Const adStateOpen As Long = 1
 Private Const adDate As Long = 7

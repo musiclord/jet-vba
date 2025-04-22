@@ -1,7 +1,9 @@
 Attribute VB_Name = "mod_Utility"
+
+Option Explicit
 'Module: Utility
 'Public procedures or functions for current Excel project.
-Option Explicit
+
 Private cApp As cApplication
 
 Public Sub Start()

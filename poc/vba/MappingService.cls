@@ -7,9 +7,10 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
+
+Option Explicit
 'Model: Mapping Service
 'Description: Handles mapping procedures of columns between source and target table.
-Option Explicit
 
 Private Sub Class_Initialize()
 

@@ -7,9 +7,10 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
+
+Option Explicit
 'Model: TB entity
 'Description: Data structure and interface for GL.
-Option Explicit
 
 'Necessary
 Private strDocumentNumber As String     '¶Ç²¼¸¹½X

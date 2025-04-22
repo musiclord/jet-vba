@@ -22,7 +22,7 @@ Public Event DoImportGL()
 Public Event DoImportTB()
 Public Event DoMapping()
 Public Event DoPreview()
-Public Event GetTable()
+Public Event GetTableNames()
 
 Private Sub ButtonExit_Click()
     RaiseEvent DoExit
@@ -47,7 +47,7 @@ End Sub
 
 Private Sub ListTable_DropButtonClick()
     ' Accquire all table names from available databases.
-    RaiseEvent GetTable
+    RaiseEvent GetTableNames
 End Sub
 
 Private Sub UserForm_Initialize()
