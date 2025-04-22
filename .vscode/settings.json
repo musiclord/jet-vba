@@ -1,3 +1,4 @@
 {
-    "files.encoding": "cp950"
+    "files.encoding": "cp950",
+    "chat.agent.maxRequests": 30
 }

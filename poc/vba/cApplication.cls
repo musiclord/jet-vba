@@ -9,9 +9,10 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 
 Option Explicit
-'Controller: Application
-'Description: The main controller of all interfaces and classes.
+' Controller: Application Controller
+' Description: Main controller for the application, handling UI events and coordinating services.
 
+Private Const MODULE_NAME As String = "cApplication"
 Private WithEvents vMain As vMain
 Attribute vMain.VB_VarHelpID = -1
 Private cMapping As cMapping
@@ -83,7 +84,7 @@ Private Sub ImportCSV(ByVal importType As String)
     If csvFilePath = "False" Then Exit Sub ' 使用者取消
     
     ' 2. 設定路徑和名稱
-    accessDbPath = ThisWorkbook.path & "\" & DATABASE_NAME ' <-- 使用預設的資料庫名稱
+    accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME ' <-- 使用預設的資料庫名稱
     tableName = importType                                 ' <-- 資料表名稱由 importType 決定
     worksheetName = importType                             ' <-- 預覽工作表名稱也使用 importType
     
