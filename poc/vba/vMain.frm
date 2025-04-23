@@ -13,16 +13,21 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
+Option Explicit
 'View: Main
 'Description: Main user form to interact with functions.
 
-Option Explicit
 Public Event DoExit()
 Public Event DoImportGL()
 Public Event DoImportTB()
 Public Event DoMapping()
 Public Event DoPreview()
 Public Event GetTableNames()
+
+Private Sub UserForm_Initialize()
+    Me.Show (vbModeless)
+End Sub
 
 Private Sub ButtonExit_Click()
     RaiseEvent DoExit
@@ -48,8 +53,4 @@ End Sub
 Private Sub ListTable_DropButtonClick()
     ' Accquire all table names from available databases.
     RaiseEvent GetTableNames
-End Sub
-
-Private Sub UserForm_Initialize()
-    Me.Show (vbModeless)
 End Sub

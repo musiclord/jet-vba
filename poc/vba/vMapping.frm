@@ -13,9 +13,11 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
+Option Explicit
 'View: Mapping
 'Description: User form that let user map column names to standardize table
-Option Explicit
+
 Public Event DoExit()
 Public Event DoConfirm()
 

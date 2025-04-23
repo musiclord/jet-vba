@@ -9,10 +9,10 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 
 Option Explicit
- 'Model: Import Service
+'Model: Import Service
 'Description: Handle any data import logics and uses AccessDAL for database operation.
 
-Private Const adDate As Long = 7 ' <-- 暫時保留，用於 LoadToExcel 的日期格式化
+Private Const adDate As Long = 7 ' <-- 用於 LoadToExcel 的日期格式化
 Private Const MODULE_NAME As String = "ImportService" ' <-- 加入模組名稱常數
 
 Private Sub Class_Initialize()
@@ -98,129 +98,5 @@ ErrorHandler:
     GoTo CleanUp ' 確保資源被釋放
 End Function
 
-Public Function LoadToExcel(ByVal accessDbPath As String, ByVal tableName As String, ByVal worksheetName As String, ByVal maxRowsToShow As Long) As Boolean
-    ' 重構後：使用 AccessDAL 獲取資料，保留 Excel 操作部分 (待進一步分離)
-    Const METHOD_NAME As String = "LoadToExcel"
-    Dim dal As AccessDAL
-    Dim rs As Object   ' ADODB.Recordset (從 DAL 獲取)
-    Dim ws As Worksheet
-    Dim sql As String
-    Dim i As Long
-    Dim targetSheetExists As Boolean
-    Dim fieldCount As Long
-    Dim recordCount As Long ' 用於 CopyFromRecordset
 
-    On Error GoTo ErrorHandler
-    LoadToExcel = False ' 預設為失敗
-
-    ' --- Excel 工作表處理部分 (暫時保留，理想情況應移至 Controller/View) ---
-    Application.DisplayAlerts = False
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(worksheetName)
-    targetSheetExists = (Err.Number = 0)
-    On Error GoTo ErrorHandler
-    Application.DisplayAlerts = True
-
-    If targetSheetExists Then
-        ws.Cells.Clear
-        Debug.Print "已清空現有工作表: " & worksheetName
-    Else
-        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
-        ws.name = worksheetName
-        On Error Resume Next ' 嘗試修改 CodeName
-        ThisWorkbook.VBProject.VBComponents(ws.CodeName).name = worksheetName
-        If Err.Number <> 0 Then Debug.Print "警告: 無法修改工作表 '" & worksheetName & "' 的 VBA CodeName。": Err.Clear
-        On Error GoTo ErrorHandler
-        Debug.Print "已建立新工作表: " & worksheetName
-    End If
-    ' --- Excel 工作表處理部分結束 ---
-
-
-    ' 2. 建立 DAL 並獲取資料
-    Set dal = New AccessDAL
-    dal.DatabasePath = accessDbPath
-
-    ' 3. 建立 SQL 語句
-    If maxRowsToShow > 0 Then
-        sql = "SELECT TOP " & maxRowsToShow & " * FROM [" & tableName & "]"
-    Else
-        sql = "SELECT * FROM [" & tableName & "]"
-    End If
-
-    ' 4. 從 DAL 獲取 Recordset (建議獲取 disconnected recordset)
-    Set rs = dal.GetRecordset(sql, disconnectRecordset:=True) ' 獲取後即可斷開連接
-
-    ' 5. 檢查 Recordset 是否有效
-    If rs Is Nothing Then
-        ' GetRecordset 內部出錯會 Raise，理論上不會執行到這裡，除非 DAL 返回 Nothing
-        Err.Raise vbObjectError + 517, MODULE_NAME & "." & METHOD_NAME, "Failed to retrieve data from Access."
-    End If
-
-    ' --- 將資料寫入 Excel (暫時保留) ---
-    If Not (rs.EOF And rs.BOF) Then ' 檢查是否有記錄
-        rs.MoveFirst ' 確保指針在開頭 (對於 disconnected recordset 也是好習慣)
-        fieldCount = rs.Fields.Count
-        recordCount = rs.recordCount ' Disconnected recordset 可以直接獲取 RecordCount
-
-        ' 6. 寫入標題
-        For i = 0 To fieldCount - 1
-            ws.Cells(1, i + 1).value = rs.Fields(i).name
-        Next i
-
-        ' 7. 複製資料
-        If recordCount > 0 Then
-            ws.Range("A2").CopyFromRecordset rs, recordCount ' 指定複製的記錄數
-        End If
-
-        ' 8. 處理日期格式 (可選)
-        For i = 0 To fieldCount - 1
-            If rs.Fields(i).Type = adDate Then ' adDate = 7
-                If recordCount > 0 Then ' 確保有資料行
-                     ws.Range("A2").Offset(0, i).Resize(recordCount, 1).NumberFormat = "yyyy/mm/dd"
-                End If
-            End If
-        Next i
-
-        ' 9. 調整欄寬
-        ws.Columns.AutoFit
-    Else
-        ' 如果 Access 表格是空的，嘗試從 DAL 獲取欄位資訊 (如果 GetRecordset 即使空也返回帶欄位的 rs)
-        If Not rs Is Nothing Then
-             If rs.Fields.Count > 0 Then
-                 For i = 0 To rs.Fields.Count - 1
-                    ws.Cells(1, i + 1).value = rs.Fields(i).name
-                Next i
-                ws.Columns.AutoFit
-             Else
-                 ws.Cells(1, 1).value = "資料表 [" & tableName & "] 不存在或無法讀取欄位。"
-             End If
-        Else
-             ws.Cells(1, 1).value = "無法讀取資料表 [" & tableName & "]。"
-        End If
-        MsgBox "Access 資料表 [" & tableName & "] 中沒有資料可載入。", vbInformation
-    End If
-    ' --- Excel 寫入部分結束 ---
-
-    ' 10. 成功
-    LoadToExcel = True
-
-CleanUp:
-    ' 清理資源
-    On Error Resume Next
-    If Not rs Is Nothing Then If rs.State = 1 Then rs.Close ' adStateOpen = 1, 雖然是 disconnected，以防萬一
-    Set rs = Nothing
-    Set dal = Nothing ' DAL 的 Terminate 會處理連接
-    Set ws = Nothing
-    Exit Function
-
-ErrorHandler:
-    LoadToExcel = False
-    Debug.Print "--- LoadToExcel Error ---"
-    Debug.Print "Error Number: " & Err.Number
-    Debug.Print "Error Source: " & Err.Source
-    Debug.Print "Error Description: " & Err.Description
-    Application.DisplayAlerts = True ' 確保提示被恢復
-    Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp
-End Function
 
