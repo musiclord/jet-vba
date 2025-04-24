@@ -8,12 +8,20 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
-' Controller: Application Controller
-' Description: Main controller for the application, handling UI events and coordinating services.
+'===============================================================================
+' Module:    cApplication
+' Purpose:   應用程式的主要控制器 (Controller)。
+'            負責處理來自 vMain 使用者介面的事件，
+'            協調各個服務 (Service) 類別來執行業務邏輯，
+'            並管理應用程式的生命週期。
+'===============================================================================
 
+' --- 常數 ---
 Private Const MODULE_NAME As String = "cApplication"
 Private Const DATABASE_NAME As String = "default.accdb"
 Private Const MAX_ROWS_TO_SHOW As Long = 1000
+
+' --- 模組變數 ---
 Private WithEvents vMain As vMain
 Attribute vMain.VB_VarHelpID = -1
 Private cMapping As cMapping
@@ -33,46 +41,51 @@ Private Sub Class_Initialize()
     Set GLService = New GLService
     Set TBEntity = New TBEntity
     Set TBService = New TBService
+    ' --> Load AppConfig <--
     Set vMain = New vMain
 End Sub
 
 Private Sub vMain_DoExit()
     Call vMain.Hide
-    ' --> Save checkpoint <--
+    ' --> Save AppConfig <--
     Unload vMain
     Set vMain = Nothing
 End Sub
 
 Private Sub vMain_DoImportGL()
-    Call ImportCSV("GL")
+    Call Me.ImportCSV("GL")
 End Sub
 
 Private Sub vMain_DoImportTB()
-    Call ImportCSV("TB")
+    Call Me.ImportCSV("TB")
 End Sub
 
-Private Sub vMain_DoMapping()
+Private Sub vMain_OpenMapping()
     Set cMapping = New cMapping
 End Sub
 
 Private Sub vMain_DoPreview()
-    Call PreviewTable
+    Call Me.PreviewTable
 End Sub
 
 Private Sub vMain_GetTableNames()
-    Call GetTableNames
+    Call Me.PopulateTableList
 End Sub
+
+'-------------------------------------------------------------------------------
+' Procedure: PreviewTable
+' Purpose:   根據 vMain 下拉選單中的選擇，從 Access 資料庫讀取指定資料表，
+'            並使用 PreviewService 將其內容顯示在新的 Excel 工作表中。
+'            工作表名稱會根據資料表名稱加上 "_Preview" 後綴。
+' Note:      會使用模組級常數 DATABASE_NAME 和 MAX_ROWS_TO_SHOW。
+'-------------------------------------------------------------------------------
 Private Sub PreviewTable()
-    ' Controller: Handles the request to preview a selected table from vMain.
     Const METHOD_NAME As String = "PreviewTable"
     Dim tableName As String
     Dim worksheetName As String
     Dim accessDbPath As String
-
     On Error GoTo ErrorHandler
-
     ' 1. 從 vMain 的 ComboBox (命名為 ListTable) 獲取選取的資料表名稱
-    ' 修改：使用更可靠的方式獲取 ComboBox 的值
     On Error Resume Next ' Handle ListTable potentially not existing or no selection
     If vMain.ListTable.ListIndex >= 0 Then ' 確保有選取項目
         tableName = vMain.ListTable.List(vMain.ListTable.ListIndex)
@@ -85,18 +98,12 @@ Private Sub PreviewTable()
         Exit Sub
     End If
     On Error GoTo ErrorHandler ' Restore default error handling
-
     ' 2. 設定參數 (使用模組級常數)
-    accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME ' <-- Use module const
-    worksheetName = tableName & "_Preview" ' 修改：統一工作表命名規則
-
+    accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME '
+    worksheetName = tableName & "_Preview"
     ' 3. 執行預覽 (調用 PreviewService, 使用模組級常數)
     Application.StatusBar = "正在載入資料表 [" & tableName & "] 的預覽..."
     Application.Cursor = xlWait
-
-    ' Ensure PreviewService is initialized
-    If PreviewService Is Nothing Then Set PreviewService = New PreviewService
-
     If PreviewService.ShowPreview(accessDbPath, tableName, worksheetName, MAX_ROWS_TO_SHOW) Then ' <-- Use module const
         Application.StatusBar = False
         Application.Cursor = xlDefault
@@ -104,9 +111,7 @@ Private Sub PreviewTable()
     Else
         GoTo ErrorHandler
     End If
-    
     Exit Sub
-    
 ErrorHandler:
     Application.StatusBar = False
     Application.Cursor = xlDefault
@@ -115,7 +120,14 @@ ErrorHandler:
            "描述: " & Err.Description, vbCritical, "預覽錯誤"
 End Sub
 
-Private Sub GetTableNames()
+'-------------------------------------------------------------------------------
+' Procedure: PopulateTableList
+' Purpose:   從 Access 資料庫獲取所有使用者資料表的名稱列表，
+'            並將這些名稱填入 vMain 表單上的 ListTable ComboBox 中。
+'            如果無法讀取或沒有資料表，會在 ComboBox 中顯示提示訊息。
+' Note:      會使用模組級常數 DATABASE_NAME。
+'-------------------------------------------------------------------------------
+Private Sub PopulateTableList()
     ' Controller: Gets table names via PreviewService and populates vMain.ListTable
     Dim tableNamesVariant As Variant ' Service returns a Variant Array
     Dim tableName As Variant
@@ -125,17 +137,11 @@ Private Sub GetTableNames()
 
     ' 1. 設定資料庫路徑 (使用模組級常數)
     accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
-
     ' 2. 調用 PreviewService 獲取資料表名稱
-    ' Ensure PreviewService is initialized (should be in Class_Initialize)
-    If PreviewService Is Nothing Then Set PreviewService = New PreviewService
     tableNamesVariant = PreviewService.GetAccessTableNames(accessDbPath)
-
-    ' 3. 清空並禁用 ComboBox (預設)
-    ' vMain.ListTable.MatchRequired = False ' <-- 移除此行
+    ' 3. 清空並禁用 ComboBox 以進行填充
     vMain.ListTable.Clear
-    vMain.ListTable.Enabled = False ' 禁用以進行填充
-
+    vMain.ListTable.Enabled = False
     ' 4. 填充 ComboBox
     If IsEmpty(tableNamesVariant) Then
          vMain.ListTable.AddItem "(讀取資料表錯誤或無資料表)"
@@ -145,12 +151,9 @@ Private Sub GetTableNames()
             For Each tableName In tableNamesVariant
                 vMain.ListTable.AddItem tableName
             Next tableName
-
             ' 在設定 ListIndex 前檢查 ListCount
             If vMain.ListTable.ListCount > 0 Then
-                vMain.ListTable.Enabled = True ' *** 啟用 ComboBox ***
-                vMain.ListTable.ListIndex = 0 ' 再設定預設選項
-                ' vMain.ListTable.MatchRequired = True ' <-- 移除此行
+                vMain.ListTable.Enabled = True ' 啟用 ComboBox
             Else
                 ' 如果迴圈後列表仍為空
                 If vMain.ListTable.ListCount = 0 Then
@@ -166,7 +169,6 @@ Private Sub GetTableNames()
          vMain.ListTable.AddItem "(讀取資料表時傳回非預期類型)"
          ' 保持禁用狀態
     End If
-
 CleanUp:
     Exit Sub
 ErrorHandler:
@@ -176,13 +178,22 @@ ErrorHandler:
          vMain.ListTable.Clear
          vMain.ListTable.AddItem "(讀取資料表錯誤)"
          vMain.ListTable.Enabled = False
-         ' vMain.ListTable.MatchRequired = False ' <-- 移除此行
          On Error GoTo 0
      End If
      MsgBox "讀取資料庫資料表列表時發生錯誤。" & vbCrLf & "請檢查資料庫連接或聯繫管理員。", vbCritical, "讀取錯誤"
      GoTo CleanUp
 End Sub
 
+'-------------------------------------------------------------------------------
+' Procedure: ImportCSV
+' Purpose:   處理將 CSV 檔案匯入到 Access 資料庫的通用流程。
+'            包括選擇檔案、偵測編碼、調用 ImportService 匯入資料，
+'            以及調用 PreviewService 顯示匯入後的資料預覽。
+' Arguments:
+'   @param importType (String): 指定匯入的類型 ("GL" 或 "TB")，用於決定目標資料表名稱等。
+' Note:      會使用模組級常數 DATABASE_NAME 和 MAX_ROWS_TO_SHOW。
+'            依賴於標準模組 mod_Utility 中的 DetectCSVEncoding 函數。
+'-------------------------------------------------------------------------------
 Private Sub ImportCSV(ByVal importType As String)
     ' 控制器：協調 CSV 匯入流程 (GL 或 TB)
     Dim csvFilePath As String
@@ -212,9 +223,9 @@ Private Sub ImportCSV(ByVal importType As String)
     Application.StatusBar = "正在處理 " & importType & " 資料到資料庫 [" & DATABASE_NAME & "]，請稍候..."
     Application.Cursor = xlWait
     On Error GoTo ErrorHandler
-
+    
     ' 3a. 偵測編碼
-    ' 注意: DetectCSVEncoding 應位於 mod_Utility
+    ' 注意: DetectCSVEncoding 位於 mod_Utility.bas
     On Error Resume Next
     csvEncoding = mod_Utility.DetectCSVEncoding(csvFilePath)
     If Err.Number <> 0 Then
@@ -237,7 +248,7 @@ Private Sub ImportCSV(ByVal importType As String)
     If Not PreviewService.ShowPreview(accessDbPath, tableName, worksheetName, MAX_ROWS_TO_SHOW) Then ' <-- 使用模組級常數
          GoTo ErrorHandler
     End If
-
+    
     ' 4. 完成
     Application.StatusBar = False
     Application.Cursor = xlDefault
@@ -245,7 +256,6 @@ Private Sub ImportCSV(ByVal importType As String)
     Exit Sub
 
 ErrorHandler:
-    ' ... (ErrorHandler 保持不變) ...
     Application.StatusBar = False
     Application.Cursor = xlDefault
     MsgBox importType & " 處理過程中發生錯誤：" & vbCrLf & _

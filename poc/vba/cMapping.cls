@@ -12,11 +12,11 @@ Option Explicit
 'Controller: Mapping
 'Description: Controller of vMapping.
 
-Private WithEvents vMApping As vMApping
-Attribute vMApping.VB_VarHelpID = -1
+Private WithEvents vMapping As vMapping
+Attribute vMapping.VB_VarHelpID = -1
 
 Private Sub Class_Initialize()
-    Set vMApping = New vMApping
+    Set vMapping = New vMapping
 End Sub
 
 Private Sub vMapping_DoConfirm()
@@ -26,7 +26,7 @@ Private Sub vMapping_DoConfirm()
 End Sub
 
 Private Sub vMapping_DoExit()
-    Call vMApping.Hide
-    Unload vMApping
-    Set vMApping = Nothing
+    Call vMapping.Hide
+    Unload vMapping
+    Set vMapping = Nothing
 End Sub

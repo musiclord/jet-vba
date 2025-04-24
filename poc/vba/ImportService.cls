@@ -98,5 +98,6 @@ ErrorHandler:
     GoTo CleanUp ' 確保資源被釋放
 End Function
 
+Private Sub Class_Terminate()
 
-
+End Sub

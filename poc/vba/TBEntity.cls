@@ -19,7 +19,6 @@ Private strAccountName As String        '會計科目名稱
 Private dblOpeningBalance As Double     '期初金額
 Private dblClosingBalance As Double     '期末金額
 Private dblNetChange As Double          '本期變動
-Private intLineItem As Integer          '項次編號
 
 Public Property Get DocumentNumber() As String
     DocumentNumber = strDocumentNumber
@@ -63,9 +62,3 @@ Public Property Let NetChange(ByVal value As Double)
     dblNetChange = value
 End Property
 
-Public Property Get LineItem() As Integer
-    LineItem = intLineItem
-End Property
-Public Property Let LineItem(ByVal value As Integer)
-    intLineItem = value
-End Property

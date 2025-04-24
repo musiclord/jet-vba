@@ -50,7 +50,7 @@ Private Sub ButtonPreview_Click()
     RaiseEvent DoPreview
 End Sub
 
-Private Sub ListTable_DropButtonClick()
-    ' Accquire all table names from available databases.
+Private Sub ListTable_Enter()
+    ' 當 ComboBox 獲得焦點時觸發事件
     RaiseEvent GetTableNames
 End Sub
