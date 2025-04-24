@@ -13,6 +13,6 @@ Option Explicit
 'Description: All GL related procedure, such as AddLineItem()
 
 Public Sub AddLineItem()
-    ' Call mGLEntity to add column and specific operation
-    ' then mGLEntity will call cAccess to operate SQL query.
+    ' 對資料表 GL 新增欄位 [LineItem(傳票文件項次)]
+    ' 用作資料增強，將欄位映射後的資料表 GL 對 [DocumentNumber] 分組後設置遞增的數字
 End Sub

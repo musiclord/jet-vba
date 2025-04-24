@@ -10,8 +10,8 @@ Attribute VB_Exposed = False
 Option Explicit
 
 Private Const MODULE_NAME As String = "AccessDAL"
-Private Const DB_PROVIDER As String = "Microsoft.ACE.OLEDB.12.0" ' Or Microsoft.Jet.OLEDB.4.0 for .mdb
-Private m_conn As Object ' ADODB.Connection - Late binding
+Private Const DB_PROVIDER As String = "Microsoft.ACE.OLEDB.12.0"
+Private m_conn As Object ' - Late binding
 Private m_dbPath As String
 
 ' --- Public Properties ---
