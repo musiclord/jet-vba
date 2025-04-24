@@ -23,7 +23,9 @@
     *   `GetTableNames` 方法使用 `OpenSchema` 獲取使用者資料表列表，並使用 VBA 內建的 `Collection` 來處理列表。
 
 6.  **服務層 (`PreviewService.cls`, `ImportService.cls` 等):**
-    *   `PreviewService.cls` 包含 `ShowPreview` (將 Access 資料表預覽到 Excel) 和 `GetAccessTableNames` (從 `AccessDAL` 獲取資料表列表) 的邏輯。
+    *   `PreviewService.cls` 包含：
+        *   `ShowPreview`: 將 Access 資料表預覽到 Excel。**此方法現在應確保預覽資料始終顯示在 codename 為 "Preview" 的工作表上。如果該工作表不存在，則創建它。每次預覽時，會清空此工作表內容，並將其顯示名稱（Name 屬性）設為 "#" + 資料表名稱（例如 "#GL"），覆寫現有內容和名稱，確保只使用單一工作表進行預覽。**
+        *   `GetAccessTableNames`: 從 `AccessDAL` 獲取資料表列表的邏輯。
     *   `ImportService.cls` 包含 `ImportToAccess` (處理 CSV 匯入到 Access 的邏輯，包括調用 `AccessDAL.DropTableIfExists` 和 `AccessDAL.ExecuteSQL`)。
     *   其他服務 (GL/TB/Mapping/Filter) 負責各自領域的業務邏輯。
 
@@ -54,13 +56,18 @@
     *   為模組和重要程序編寫文件註解。
 
 **當前任務:**
-實現欄位映射功能，讓使用者能夠將匯入的 `GL` 和 `TB` 資料表欄位對應到系統預定義的標準欄位。
+根據新的需求，修改資料表預覽功能，確保預覽始終使用 codename 為 "Preview" 的單一工作表，並動態更新其顯示名稱。
 
 **本次聚焦目標:**
-*   完善 `vMapping.frm` 的介面設計，確保包含所有必要的 ComboBox 控制項來對應 `GLEntity` 和 `TBEntity` 的欄位。
-*   在 `vMapping.UserForm_Initialize` 中，實現從 `GL` 和 `TB` 資料表（或透過 Service 層）獲取欄位名稱，並填充到對應的 ComboBox 下拉選單中。
-*   實現 `cMapping.cls` 中的事件處理邏輯，特別是 `vMapping_DoConfirm`，用於收集使用者的映射選擇。
-*   開發 `MappingService.cls` 中的核心邏輯，用於儲存和應用這些映射關係（初始階段可能只是將映射結果暫存或傳遞給 Controller）。
+*   修改 `PreviewService.cls` 中的 `ShowPreview` 方法：
+    *   實現查找或創建 codename 為 "Preview" 的工作表的邏輯。
+    *   實現清空該工作表內容的邏輯。
+    *   實現將該工作表的 `Name` 屬性設置為 `"#"` + `tableName` 的邏輯，並處理可能的名稱衝突。
+    *   將從 Access 讀取的資料複製到此 "Preview" 工作表。
+*   檢查 `cApplication.cls` 中的 `PreviewTable` 方法，確保它正確調用 `PreviewService.ShowPreview` 並傳遞選定的資料表名稱。
+*   進行測試：
+    *   首次預覽某個資料表（例如 "GL"）時，應創建或使用 "Preview" 工作表，並將其名稱設為 "#GL"。
+    *   接著預覽另一個資料表（例如 "TB"）時，應覆寫同一張 "Preview" 工作表的內容，並將其名稱更新為 "#TB"，而不是創建新的工作表。
 
 **執行要求與限制:**
 

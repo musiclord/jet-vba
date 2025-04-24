@@ -53,11 +53,11 @@ Private Sub vMain_DoExit()
 End Sub
 
 Private Sub vMain_DoImportGL()
-    Call Me.ImportCSV("GL")
+    Call ImportCSV("GL")
 End Sub
 
 Private Sub vMain_DoImportTB()
-    Call Me.ImportCSV("TB")
+    Call ImportCSV("TB")
 End Sub
 
 Private Sub vMain_OpenMapping()
@@ -65,11 +65,11 @@ Private Sub vMain_OpenMapping()
 End Sub
 
 Private Sub vMain_DoPreview()
-    Call Me.PreviewTable
+    Call PreviewTable
 End Sub
 
 Private Sub vMain_GetTableNames()
-    Call Me.PopulateTableList
+    Call PopulateTableList
 End Sub
 
 '-------------------------------------------------------------------------------
