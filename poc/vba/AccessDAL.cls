@@ -58,7 +58,7 @@ Public Function Connect() As Boolean
         If Err.Number <> 0 Then
             Set fso = Nothing
             Err.Raise vbObjectError + 518, MODULE_NAME & "." & METHOD_NAME, "Failed to create ADOX.Catalog object. Ensure 'Microsoft ADO Ext. for DDL and Security' components are available or registered."
-            GoTo CleanUp ' Exit if ADOX object creation fails
+            GoTo Cleanup ' Exit if ADOX object creation fails
         End If
         On Error GoTo ErrorHandler ' Restore default error handling
 
@@ -76,7 +76,7 @@ Public Function Connect() As Boolean
             Set fso = Nothing
             Err.Clear ' Clear the error before raising a new one
             Err.Raise vbObjectError + 519, MODULE_NAME & "." & METHOD_NAME, "Failed to create new database file at '" & m_dbPath & "'. Error: " & createErrorDesc
-            GoTo CleanUp ' Exit if creation fails
+            GoTo Cleanup ' Exit if creation fails
         End If
         On Error GoTo ErrorHandler ' Restore default error handling
 
@@ -111,7 +111,7 @@ Public Function Connect() As Boolean
         ' Consider if a MsgBox is appropriate here, or just logging. Logging is less intrusive.
     End If
 
-CleanUp: ' Added CleanUp label
+Cleanup: ' Added CleanUp label
     Set fso = Nothing ' Ensure FSO is released on exit/error
     ' Set cat = Nothing ' Ensure ADOX object is released (already done above, but safe)
     Exit Function
@@ -124,7 +124,7 @@ ErrorHandler:
     Debug.Print "Error Description: " & Err.Description
     ' Raise the error to the caller
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp ' Go to cleanup after raising error
+    GoTo Cleanup ' Go to cleanup after raising error
 End Function
 
 Public Sub Disconnect()
@@ -166,13 +166,13 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
         Debug.Print MODULE_NAME & ".ExecuteSQL - Connection object is Nothing. Attempting to connect..."
         If Not Me.Connect Then ' Assumes Connect method uses m_DatabasePath
             Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "Failed to establish database connection before executing SQL. Check DatabasePath property."
-            GoTo CleanUp ' Exit if connection fails
+            GoTo Cleanup ' Exit if connection fails
         End If
     ElseIf Not IsConnected() Then ' <-- Use IsConnected() which checks m_conn.State
         Debug.Print MODULE_NAME & ".ExecuteSQL - Connection state is not open. Attempting to reconnect..."
         If Not Me.Connect Then ' Try to reconnect
              Err.Raise vbObjectError + 515, MODULE_NAME & "." & METHOD_NAME, "Failed to re-establish database connection before executing SQL. Check DatabasePath property."
-             GoTo CleanUp ' Exit if reconnection fails
+             GoTo Cleanup ' Exit if reconnection fails
         End If
     End If
     ' --- End Enhanced Connection Check ---
@@ -207,7 +207,7 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
             Debug.Print MODULE_NAME & ".ExecuteSQL - ERROR: Database file NOT FOUND at path from connection string: " & dbPathFromConn
             Set fso = Nothing ' Release before raising error
             Err.Raise vbObjectError + 516, MODULE_NAME & "." & METHOD_NAME, "Database file specified in connection string not found: " & dbPathFromConn
-            GoTo CleanUp ' Should not be reached if Err.Raise works
+            GoTo Cleanup ' Should not be reached if Err.Raise works
         Else
             Debug.Print MODULE_NAME & ".ExecuteSQL - Database file confirmed FOUND at path from connection string."
         End If
@@ -224,7 +224,7 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
     
     ExecuteSQL = recordsAffected ' Success
 
-CleanUp:
+Cleanup:
     ' Optional: Decide if connection should be closed here or managed elsewhere
     Exit Function
 
@@ -244,7 +244,7 @@ ErrorHandler:
     Debug.Print "Error Source: " & Err.Source & " (Original Error: " & Err.Description & ")"
     ' Raise a more informative error, including the original description
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, errorDesc
-    GoTo CleanUp ' Should not be reached if Err.Raise works
+    GoTo Cleanup ' Should not be reached if Err.Raise works
 End Function
 
 ' --- Data Query (DQL) ---
@@ -331,7 +331,7 @@ Public Function GetTableNames() As Variant ' Returns array of table names or Emp
     Dim rs As Object ' ADODB.Recordset
     Dim tblList As Collection ' Changed type hint for clarity
     Dim tblName As String
-    Dim result() As String
+    Dim Result() As String
     Dim i As Long
     On Error GoTo ErrorHandler
     
@@ -356,11 +356,11 @@ Public Function GetTableNames() As Variant ' Returns array of table names or Emp
     Set rs = Nothing
     
     If tblList.Count > 0 Then
-        ReDim result(1 To tblList.Count)
+        ReDim Result(1 To tblList.Count)
         For i = 1 To tblList.Count
-            result(i) = tblList(i)
+            Result(i) = tblList(i)
         Next i
-        GetTableNames = result
+        GetTableNames = Result
     Else
         GetTableNames = Empty ' Return Empty if no user tables found
     End If
@@ -383,7 +383,7 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
     Const METHOD_NAME As String = "GetTableFieldNames"
     Dim rs As Object ' ADODB.Recordset
     Dim fieldList As Object ' Collection
-    Dim result() As String
+    Dim Result() As String
     Dim i As Long
     On Error GoTo ErrorHandler
 
@@ -413,11 +413,11 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
     Set rs = Nothing
 
     If fieldList.Count > 0 Then
-        ReDim result(1 To fieldList.Count)
+        ReDim Result(1 To fieldList.Count)
         For i = 1 To fieldList.Count
-            result(i) = fieldList(i)
+            Result(i) = fieldList(i)
         Next i
-        GetTableFieldNames = result
+        GetTableFieldNames = Result
     Else
         GetTableFieldNames = Empty
     End If

@@ -7,7 +7,6 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
-
 Option Explicit
 'Model: Import Service
 'Description: Handle any data import logics and uses AccessDAL for database operation.
@@ -20,84 +19,228 @@ Private Sub Class_Initialize()
 End Sub
 
 Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath As String, ByVal tableName As String, ByVal csvEncoding As Long) As Boolean
-    ' 重構後：使用 AccessDAL 處理資料庫操作，利用 Text Driver 進行匯入
-    Const METHOD_NAME As String = "ImportToAccess"
-    Dim dal As AccessDAL
-    Dim fso As Object ' FileSystemObject
-    Dim csvFolder As String
-    Dim csvFile As String
+    Dim startTime As Double
+    startTime = Timer
+
+    Dim adoStream As ADODB.stream
+    Dim conn As ADODB.Connection
     Dim sql As String
-    Dim schemaIniPath As String ' Schema.ini 路徑
+    Dim line As String
+    Dim headers() As String
+    Dim values() As String
+    Dim i As Long
+    Dim columnCount As Long
+    Dim blnSuccess As Boolean
+    Dim fso As Scripting.FileSystemObject ' Still needed for file checks
 
     On Error GoTo ErrorHandler
-    ImportToAccess = False ' 預設為失敗
+    ImportToAccess = False ' Default to failure
 
-    ' 1. 驗證輸入與檔案存在
-    If csvFilePath = "" Or accessDbPath = "" Or tableName = "" Then
-        Err.Raise vbObjectError + 513, MODULE_NAME & "." & METHOD_NAME, "CSV file path, Access DB path, and target table name cannot be empty."
-    End If
+    ' --- 1. 設定物件 ---
+    Set fso = New Scripting.FileSystemObject ' For file existence checks
+    Set adoStream = New ADODB.stream
+    Set conn = New ADODB.Connection
 
-    Set fso = CreateObject("Scripting.FileSystemObject")
+    ' --- 2. 檢查檔案是否存在 ---
     If Not fso.FileExists(csvFilePath) Then
-        Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "CSV file not found: " & csvFilePath
+        Err.Raise vbObjectError + 513, MODULE_NAME & ".ImportToAccess", "CSV 檔案未找到: " & csvFilePath
+        GoTo Cleanup
+    End If
+    If Not fso.FileExists(accessDbPath) Then
+        Err.Raise vbObjectError + 514, MODULE_NAME & ".ImportToAccess", "Access 資料庫未找到: " & accessDbPath
+        GoTo Cleanup
     End If
 
-    csvFolder = fso.GetParentFolderName(csvFilePath)
-    csvFile = fso.GetFileName(csvFilePath)
-    schemaIniPath = csvFolder & "\Schema.ini" ' 假設 Schema.ini 在 CSV 同目錄
+    ' --- 3. 設定 ADODB.Stream ---
+    adoStream.Type = adTypeText ' Read as text
+    ' Set Charset based on detected encoding
+    Select Case csvEncoding
+        Case 65001 ' UTF-8
+            adoStream.Charset = "utf-8"
+            Debug.Print "ADODB.Stream: Setting Charset to utf-8"
+        Case 950 ' Big5 (Traditional Chinese)
+            adoStream.Charset = "big5" ' Or use "windows-950"
+            Debug.Print "ADODB.Stream: Setting Charset to big5"
+        Case 1200 ' UTF-16 LE (Unicode)
+            adoStream.Charset = "unicode"
+            Debug.Print "ADODB.Stream: Setting Charset to unicode"
+        Case Else ' Assume system default ANSI if unknown, though passing specific code is better
+            adoStream.Charset = "ascii" ' Fallback, might be incorrect
+            Debug.Print "ADODB.Stream: Warning - Unknown encoding " & csvEncoding & ", falling back to ascii."
+    End Select
+    adoStream.LineSeparator = adCRLF ' Common line ending, adjust if needed (adCR, adLF)
 
-    ' 2. 檢查 Schema.ini (重要：Text Driver 需要此檔案來正確解析 CSV)
-    If Not fso.FileExists(schemaIniPath) Then
-         ' 實際應用中可能需要更複雜的邏輯來創建或更新 Schema.ini
-         ' 例如，讀取 CSV 標頭並寫入欄位定義。
-         ' 目前假設 Schema.ini 已存在且配置正確。
-         Debug.Print "警告: Schema.ini 未在 CSV 資料夾中找到: " & schemaIniPath & ". Text Driver 可能無法正確解析 CSV。"
-         ' 可以選擇在這裡報錯退出，或繼續嘗試 (可能失敗或資料類型錯誤)
-         ' Err.Raise vbObjectError + 516, MODULE_NAME & "." & METHOD_NAME, "Schema.ini not found in CSV folder: " & csvFolder
-    End If
-    Set fso = Nothing
+    ' --- 4. 開啟並讀取 CSV 檔案 ---
+    adoStream.Open
+    adoStream.LoadFromFile csvFilePath
+    Debug.Print "ADODB.Stream: Loaded file " & csvFilePath
 
-    ' 3. 建立並設定 DAL
-    Set dal = New AccessDAL
-    dal.DatabasePath = accessDbPath ' 設定目標資料庫路徑
+    ' --- 5. 連接 Access 資料庫 ---
+    conn.ConnectionString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & accessDbPath & ";"
+    conn.Open
+    Debug.Print "ADODB Connection Opened to: " & accessDbPath
 
-    ' 4. 刪除舊表 (如果存在) - DAL 內部會檢查是否存在
+    ' --- 6. 準備 Access 表格 ---
+    ' a. 嘗試刪除舊表格
+    On Error Resume Next
+    sql = "DROP TABLE [" & tableName & "];"
     Debug.Print "Attempting to drop table: " & tableName
-    dal.DropTable tableName
+    conn.Execute sql, , adExecuteNoRecords
+    If Err.Number <> 0 Then
+        Debug.Print "Warning: Could not drop table '" & tableName & "' (may not exist). Error: " & Err.Description
+        Err.Clear
+    End If
+    On Error GoTo ErrorHandler
 
-    ' 5. 使用 Text Driver 透過 SQL 直接匯入
-    '    確保 Schema.ini 中 CharacterSet 與 csvEncoding 匹配，或在此處指定
-    '    HDR=YES 表示第一行為標頭
-    '    FMT=Delimited 表示逗號分隔 (如果不是逗號，需修改)
-    '    注意：欄位名稱將由 Text Driver 根據 CSV 標頭或 Schema.ini 決定
-    sql = "SELECT * INTO [" & tableName & "] " & _
-          "FROM [Text;Database=" & csvFolder & ";HDR=YES;FMT=Delimited;CharacterSet=" & csvEncoding & ";IMEX=1].[" & csvFile & "]"
-          ' IMEX=1 有助於將混合數據類型作為文本讀取，減少類型轉換錯誤
+    ' b. 讀取 CSV 標頭
+    If Not adoStream.EOS Then ' EOS = End Of Stream
+        line = adoStream.ReadText(adReadLine) ' Read the header line
+        headers = SplitCSVLine(line) ' Use robust Split function
+        columnCount = UBound(headers) + 1
+        Debug.Print "CSV Headers read (" & columnCount & " columns): " & Join(headers, "|")
+    Else
+        Err.Raise vbObjectError + 515, MODULE_NAME & ".ImportToAccess", "CSV 檔案為空或無法讀取標頭。"
+        GoTo Cleanup
+    End If
 
-    Debug.Print "Executing SQL for import: " & sql
-    dal.ExecuteSQL sql ' DAL 負責連接和執行
+    ' c. 建立新表格 (所有欄位為 TEXT)
+    sql = "CREATE TABLE [" & tableName & "] ("
+    For i = 0 To UBound(headers)
+        Dim colName As String
+        colName = Trim(headers(i)) ' Trim spaces from header
+        If Len(colName) = 0 Then colName = "Column" & (i + 1)
+        colName = "[" & colName & "]" ' Enclose in brackets
+        sql = sql & colName & " TEXT(255)"
+        If i < UBound(headers) Then sql = sql & ", "
+    Next i
+    sql = sql & ");"
+    Debug.Print "Creating table with SQL: " & sql
+    conn.Execute sql, , adExecuteNoRecords
+    Debug.Print "Table '" & tableName & "' created successfully."
 
-    ' 6. 成功
+    ' --- 7. 讀取資料行並插入 Access ---
+    conn.BeginTrans
+
+    Do While Not adoStream.EOS
+        line = adoStream.ReadText(adReadLine) ' Read data line
+        If Trim(line) <> "" Then
+            values = SplitCSVLine(line) ' Use robust Split function
+
+            If UBound(values) + 1 = columnCount Then
+                sql = "INSERT INTO [" & tableName & "] ("
+                ' Build column list for INSERT statement
+                For i = 0 To UBound(headers)
+                    Dim headerName As String
+                    headerName = Trim(headers(i))
+                    If Len(headerName) = 0 Then headerName = "Column" & (i + 1)
+                    sql = sql & "[" & headerName & "]"
+                    If i < UBound(headers) Then sql = sql & ", "
+                Next i
+                sql = sql & ") VALUES ("
+
+                ' Build values list for INSERT statement
+                For i = 0 To UBound(values)
+                    Dim sqlValue As String
+                    sqlValue = Replace(values(i), "'", "''") ' Escape single quotes
+                    sql = sql & "'" & sqlValue & "'" ' Enclose in single quotes
+                    If i < UBound(values) Then sql = sql & ", "
+                Next i
+                sql = sql & ");"
+                ' Debug.Print "Executing Insert: " & sql ' Uncomment for detailed insert logging
+                conn.Execute sql, , adExecuteNoRecords
+            Else
+                 Debug.Print "Warning: Skipping line due to column count mismatch (" & (UBound(values) + 1) & " vs " & columnCount & "). Line: " & line
+            End If
+        End If
+    Loop
+
+    conn.CommitTrans
+    Debug.Print "Data insertion complete."
+
+    ' --- 8. 完成 ---
     ImportToAccess = True
-    Debug.Print "Successfully imported CSV to Access table: " & tableName
 
-CleanUp:
-    ' 清理 DAL 物件 (其 Terminate 事件會處理 Disconnect)
-    Set dal = Nothing
+Cleanup:
+    On Error Resume Next
+    If Not adoStream Is Nothing Then
+        If adoStream.State = adStateOpen Then adoStream.Close
+        Set adoStream = Nothing
+    End If
+    If Not conn Is Nothing Then
+        If conn.State = adStateOpen Then conn.Close
+        Set conn = Nothing
+    End If
     Set fso = Nothing
+    On Error GoTo 0
+
+    Debug.Print MODULE_NAME & ".ImportToAccess completed in " & Format(Timer - startTime, "0.00") & " seconds. Success: " & ImportToAccess
     Exit Function
 
 ErrorHandler:
-    ImportToAccess = False ' 確認設為失敗
-    Debug.Print "--- ImportToAccess Error ---"
+    Debug.Print "Error in " & MODULE_NAME & ".ImportToAccess:"
     Debug.Print "Error Number: " & Err.Number
-    Debug.Print "Error Source: " & Err.Source
     Debug.Print "Error Description: " & Err.Description
-    ' 將錯誤向上層 (cApplication) 拋出
-    Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp ' 確保資源被釋放
+    Debug.Print "Source: " & Err.Source
+    If Not conn Is Nothing Then
+        If conn.State = adStateOpen Then
+            On Error Resume Next
+            conn.RollbackTrans
+            On Error GoTo 0
+        End If
+    End If
+    ImportToAccess = False
+    GoTo Cleanup
 End Function
 
-Private Sub Class_Terminate()
+' --- 輔助函數：更可靠地分割 CSV 行 (處理引號) ---
+Private Function SplitCSVLine(ByVal TextLine As String, Optional ByVal Delimiter As String = ",") As String()
+    Dim Result() As String
+    Dim CurrentField As String
+    Dim InQuotes As Boolean
+    Dim Char As String
+    Dim i As Long, j As Long
 
-End Sub
+    ReDim Result(0 To 0)
+    j = 0
+    InQuotes = False
+    CurrentField = ""
+
+    If TextLine = "" Then
+        SplitCSVLine = Result ' Return array with one empty element for empty line
+        Exit Function
+    End If
+
+    For i = 1 To Len(TextLine)
+        Char = Mid$(TextLine, i, 1)
+
+        If InQuotes Then
+            If Char = """" Then
+                ' Check for escaped quote ("")
+                If i < Len(TextLine) And Mid$(TextLine, i + 1, 1) = """" Then
+                    CurrentField = CurrentField & """"
+                    i = i + 1 ' Skip next quote
+                Else
+                    InQuotes = False ' End of quoted field
+                End If
+            Else
+                CurrentField = CurrentField & Char
+            End If
+        Else ' Not in quotes
+            If Char = Delimiter Then
+                ' End of field
+                Result(j) = CurrentField
+                j = j + 1
+                ReDim Preserve Result(0 To j)
+                CurrentField = ""
+            ElseIf Char = """" And CurrentField = "" Then ' Allow quotes only at start of field
+                InQuotes = True ' Start of quoted field
+            Else
+                CurrentField = CurrentField & Char
+            End If
+        End If
+    Next i
+
+    ' Add the last field
+    Result(j) = CurrentField
+    SplitCSVLine = Result
+End Function

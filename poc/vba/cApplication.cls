@@ -23,8 +23,6 @@ Private Const MAX_ROWS_TO_SHOW As Long = 1000
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
-Attribute vMain.VB_VarHelpID = -1
-Private cMapping As cMapping
 Private GLEntity As GLEntity
 Private TBEntity As TBEntity
 Private GLService As GLService
@@ -32,6 +30,20 @@ Private TBService As TBService
 Private ImportService As ImportService
 Private PreviewService As PreviewService
 Private MappingService As MappingService
+' --- Step 1 ---
+Private WithEvents vProject As vProject
+Attribute vProject.VB_VarHelpID = -1
+Private WithEvents vTBConfig As vTBConfig
+Attribute vTBConfig.VB_VarHelpID = -1
+Private WithEvents vGLConfig As vGLConfig
+Attribute vGLConfig.VB_VarHelpID = -1
+' --- Step 2 ---
+Private WithEvents vValidation As vValidation
+Attribute vValidation.VB_VarHelpID = -1
+' --- Step 3 ---
+Private WithEvents vCriteria As vCriteria
+Attribute vCriteria.VB_VarHelpID = -1
+' --- Step 4 ---
 
 Private Sub Class_Initialize()
     Set ImportService = New ImportService
@@ -41,147 +53,128 @@ Private Sub Class_Initialize()
     Set GLService = New GLService
     Set TBEntity = New TBEntity
     Set TBService = New TBService
-    ' --> Load AppConfig <--
     Set vMain = New vMain
 End Sub
 
+' ====== vMain ======
 Private Sub vMain_DoExit()
-    Call vMain.Hide
-    ' --> Save AppConfig <--
+    ' -> Save AppConfig <-
     Unload vMain
     Set vMain = Nothing
 End Sub
 
-Private Sub vMain_DoImportGL()
-    Call ImportCSV("GL")
+Private Sub vMain_DoStep1()
+    Set vProject = New vProject
+    Set vTBConfig = New vTBConfig
+    Set vGLConfig = New vGLConfig
+    
+    Call vProject.Show(vbModeless)
 End Sub
 
-Private Sub vMain_DoImportTB()
+Private Sub vMain_DoStep2()
+    ' -> vValidation
+    Set vValidation = New vValidation
+End Sub
+
+Private Sub vMain_DoStep3()
+    ' -> vCriteria
+    Set vCriteria = New vCriteria
+End Sub
+
+Private Sub vMain_DoStep4()
+    ' ...
+End Sub
+
+' ====== vProject ======
+Private Sub vProject_DoExit()
+    Unload vProject
+    Set vProject = Nothing
+End Sub
+
+Private Sub vProject_DoConfirm()
+    Call vProject.Hide
+    Call vTBConfig.Show(vbModeless)
+    vMain.lblProject.BackColor = vbYellow
+End Sub
+
+' ====== vTBConfig ======
+Private Sub vTBConfig_DoExit()
+    Unload vTBConfig
+    Set vTBConfig = Nothing
+End Sub
+
+Private Sub vTBConfig_DoImport()
     Call ImportCSV("TB")
 End Sub
 
-Private Sub vMain_OpenMapping()
-    Set cMapping = New cMapping
+Private Sub vTBConfig_DoPreview()
+    '  在工作表預覽資料表 TB
+    Call PreviewTable("TB")
 End Sub
 
-Private Sub vMain_DoPreview()
-    Call PreviewTable
+Private Sub vTBConfig_DoConfirm()
+    Call vTBConfig.Hide
+    Call vGLConfig.Show(vbModeless)
+    vMain.lblImportTB.BackColor = vbYellow
 End Sub
 
-Private Sub vMain_GetTableNames()
-    Call PopulateTableList
+' ====== vGLConfig ======
+Private Sub vGLConfig_DoExit()
+    Unload vGLConfig
+    Set vGLConfig = Nothing
 End Sub
 
-'-------------------------------------------------------------------------------
-' Procedure: PreviewTable
-' Purpose:   根據 vMain 下拉選單中的選擇，從 Access 資料庫讀取指定資料表，
-'            並使用 PreviewService 將其內容顯示在新的 Excel 工作表中。
-'            工作表名稱會根據資料表名稱加上 "_Preview" 後綴。
-' Note:      會使用模組級常數 DATABASE_NAME 和 MAX_ROWS_TO_SHOW。
-'-------------------------------------------------------------------------------
-Private Sub PreviewTable()
-    Const METHOD_NAME As String = "PreviewTable"
-    Dim tableName As String
-    Dim worksheetName As String
-    Dim accessDbPath As String
-    On Error GoTo ErrorHandler
-    ' 1. 從 vMain 的 ComboBox (命名為 ListTable) 獲取選取的資料表名稱
-    On Error Resume Next ' Handle ListTable potentially not existing or no selection
-    If vMain.ListTable.ListIndex >= 0 Then ' 確保有選取項目
-        tableName = vMain.ListTable.List(vMain.ListTable.ListIndex)
-    Else
-        tableName = ""
-    End If
+Private Sub vGLConfig_DoImport()
+    Call ImportCSV("GL")
+End Sub
+
+Private Sub vGLConfig_DoPreview()
+    ' 在工作表預覽資料表 GL
+    Call PreviewTable("GL")
+End Sub
+
+Private Sub vGLConfig_DoConfirm()
     
-    If Err.Number <> 0 Or tableName = "" Or tableName = "(無可用資料表)" Or tableName = "(讀取資料表錯誤)" Or tableName = "(讀取資料表時傳回非預期類型)" Then
-        MsgBox "請先從下拉選單中選擇一個有效的資料表進行預覽。", vbExclamation, "未選擇資料表"
-        Exit Sub
-    End If
-    On Error GoTo ErrorHandler ' Restore default error handling
-    ' 2. 設定參數 (使用模組級常數)
-    accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME '
-    worksheetName = tableName & "_Preview"
-    ' 3. 執行預覽 (調用 PreviewService, 使用模組級常數)
-    Application.StatusBar = "正在載入資料表 [" & tableName & "] 的預覽..."
-    Application.Cursor = xlWait
-    If PreviewService.ShowPreview(accessDbPath, tableName, worksheetName, MAX_ROWS_TO_SHOW) Then ' <-- Use module const
-        Application.StatusBar = False
-        Application.Cursor = xlDefault
-        MsgBox "資料表 [" & tableName & "] 預覽完成！" & vbCrLf & "資料已顯示在工作表 [" & worksheetName & "]", vbInformation, "預覽完成"
-    Else
-        GoTo ErrorHandler
-    End If
-    Exit Sub
-ErrorHandler:
-    Application.StatusBar = False
-    Application.Cursor = xlDefault
-    MsgBox "預覽資料表 [" & tableName & "] 時發生錯誤：" & vbCrLf & _
-           "來源: " & Err.Source & vbCrLf & _
-           "描述: " & Err.Description, vbCritical, "預覽錯誤"
+    ' 移至下個視窗
+    Call vGLConfig.Hide
+    vMain.lblImportGL.BackColor = vbYellow
 End Sub
 
-'-------------------------------------------------------------------------------
-' Procedure: PopulateTableList
-' Purpose:   從 Access 資料庫獲取所有使用者資料表的名稱列表，
-'            並將這些名稱填入 vMain 表單上的 ListTable ComboBox 中。
-'            如果無法讀取或沒有資料表，會在 ComboBox 中顯示提示訊息。
-' Note:      會使用模組級常數 DATABASE_NAME。
-'-------------------------------------------------------------------------------
-Private Sub PopulateTableList()
-    ' Controller: Gets table names via PreviewService and populates vMain.ListTable
-    Dim tableNamesVariant As Variant ' Service returns a Variant Array
-    Dim tableName As Variant
-    Dim accessDbPath As String
+' ====== vValidation ======
+Private Sub vValidation_DoExit()
+    Unload vValidation
+    Set vValidation = Nothing
+End Sub
 
-    On Error GoTo ErrorHandler
+Private Sub vValidation_TestCompleteness()
+    vMain.lblCompletenessTest.BackColor = vbYellow
+End Sub
 
-    ' 1. 設定資料庫路徑 (使用模組級常數)
-    accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
-    ' 2. 調用 PreviewService 獲取資料表名稱
-    tableNamesVariant = PreviewService.GetAccessTableNames(accessDbPath)
-    ' 3. 清空並禁用 ComboBox 以進行填充
-    vMain.ListTable.Clear
-    vMain.ListTable.Enabled = False
-    ' 4. 填充 ComboBox
-    If IsEmpty(tableNamesVariant) Then
-         vMain.ListTable.AddItem "(讀取資料表錯誤或無資料表)"
-         ' 保持禁用狀態
-    ElseIf IsArray(tableNamesVariant) Then
-        If UBound(tableNamesVariant) >= LBound(tableNamesVariant) Then ' Check if array is not empty
-            For Each tableName In tableNamesVariant
-                vMain.ListTable.AddItem tableName
-            Next tableName
-            ' 在設定 ListIndex 前檢查 ListCount
-            If vMain.ListTable.ListCount > 0 Then
-                vMain.ListTable.Enabled = True ' 啟用 ComboBox
-            Else
-                ' 如果迴圈後列表仍為空
-                If vMain.ListTable.ListCount = 0 Then
-                     vMain.ListTable.AddItem "(無有效資料表)"
-                End If
-                ' 保持禁用狀態
-            End If
-        Else
-            vMain.ListTable.AddItem "(無可用資料表)"
-            ' 保持禁用狀態
-        End If
-    Else
-         vMain.ListTable.AddItem "(讀取資料表時傳回非預期類型)"
-         ' 保持禁用狀態
-    End If
-CleanUp:
-    Exit Sub
-ErrorHandler:
-     ' 確保 ComboBox 在錯誤時保持禁用狀態
-     If Not vMain Is Nothing Then ' 避免在卸載過程中出錯
-         On Error Resume Next ' 忽略設置屬性時可能出現的錯誤
-         vMain.ListTable.Clear
-         vMain.ListTable.AddItem "(讀取資料表錯誤)"
-         vMain.ListTable.Enabled = False
-         On Error GoTo 0
-     End If
-     MsgBox "讀取資料庫資料表列表時發生錯誤。" & vbCrLf & "請檢查資料庫連接或聯繫管理員。", vbCritical, "讀取錯誤"
-     GoTo CleanUp
+Private Sub vValidation_TestDocumentBalance()
+    vMain.lblDocumentBalance.BackColor = vbYellow
+End Sub
+
+Private Sub vValidation_TestRDE()
+    vMain.lblRDETest.BackColor = vbYellow
+End Sub
+
+Private Sub vValidation_DoAccountMapping()
+    vMain.lblAccountMapping.BackColor = vbYellow
+End Sub
+
+Private Sub vValidation_DoConfirm()
+    Call vValidation.Hide
+End Sub
+
+' ====== vCriteria ======
+Private Sub vCriteria_DoConfirm()
+    Call vCriteria.Hide
+    vMain.lblCriteria.BackColor = vbYellow
+End Sub
+
+Private Sub vCriteria_DoExit()
+    Unload vCriteria
+    Set vCriteria = Nothing
 End Sub
 
 '-------------------------------------------------------------------------------
@@ -239,7 +232,7 @@ Private Sub ImportCSV(ByVal importType As String)
     ' 3b. 匯入至 Access (調用 ImportService)
     Application.StatusBar = "正在將 " & importType & " CSV 匯入 Access 資料表 [" & tableName & "]..."
     ' 假設 ImportService.ImportToAccess 簽名包含 csvEncoding
-    If Not ImportService.ImportToAccess(csvFilePath, accessDbPath, tableName, csvEncoding) Then
+    If Not ImportService.ImportToAccess(csvFilePath, accessDbPath, tableName, CLng(csvEncoding)) Then
         GoTo ErrorHandler
     End If
 
@@ -263,4 +256,52 @@ ErrorHandler:
            "描述: " & Err.Description, vbCritical, "錯誤"
 End Sub
 
+'-------------------------------------------------------------------------------
+' Procedure: PreviewTable
+' Purpose:   從 Access 資料庫讀取指定的資料表，
+'            並使用 PreviewService 將其內容顯示在新的 Excel 工作表中。
+'            工作表名稱會根據資料表名稱加上 "_Preview" 後綴。
+' Arguments:
+'   @param tableName (String): 要預覽的 Access 資料表名稱。
+' Note:      會使用模組級常數 DATABASE_NAME 和 MAX_ROWS_TO_SHOW。
+'-------------------------------------------------------------------------------
+Private Sub PreviewTable(ByVal tableName As String)
+    Const METHOD_NAME As String = "PreviewTable"
+    ' Dim tableName As String ' tableName 現在是參數
+    Dim worksheetName As String
+    Dim accessDbPath As String
+    On Error GoTo ErrorHandler
 
+    ' 1. 驗證輸入的 tableName (基本檢查)
+    If Trim$(tableName) = "" Then
+        MsgBox "必須提供有效的資料表名稱才能進行預覽。", vbExclamation, "未指定資料表"
+        Exit Sub
+    End If
+
+    ' 2. 設定參數 (使用模組級常數)
+    accessDbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    worksheetName = tableName & "_Preview" ' 維持原本的命名邏輯
+
+    ' 3. 執行預覽 (調用 PreviewService, 使用模組級常數)
+    Application.StatusBar = "正在載入資料表 [" & tableName & "] 的預覽..."
+    Application.Cursor = xlWait
+    If PreviewService.ShowPreview(accessDbPath, tableName, worksheetName, MAX_ROWS_TO_SHOW) Then ' <-- Use module const
+        Application.StatusBar = False
+        Application.Cursor = xlDefault
+        ' 成功訊息現在使用傳入的 tableName 和衍生的 worksheetName
+        MsgBox "資料表 [" & tableName & "] 預覽完成！" & vbCrLf & "資料已顯示在工作表 [" & worksheetName & "]", vbInformation, "預覽完成"
+    Else
+        ' 如果 PreviewService.ShowPreview 傳回 False (雖然目前設計是錯誤時引發 Error)
+        ' 或是發生其他未預期的狀況跳到 Else
+        GoTo ErrorHandler ' 轉到通用錯誤處理
+    End If
+    Exit Sub
+
+ErrorHandler:
+    Application.StatusBar = False
+    Application.Cursor = xlDefault
+    ' 錯誤訊息現在使用傳入的 tableName
+    MsgBox "預覽資料表 [" & tableName & "] 時發生錯誤：" & vbCrLf & _
+           "來源: " & Err.Source & vbCrLf & _
+           "描述: " & Err.Description, vbCritical, "預覽錯誤"
+End Sub
