@@ -23,6 +23,7 @@ Private Const MAX_ROWS_TO_SHOW As Long = 1000
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
+Attribute vMain.VB_VarHelpID = -1
 Private GLEntity As GLEntity
 Private TBEntity As TBEntity
 Private GLService As GLService
@@ -30,6 +31,7 @@ Private TBService As TBService
 Private ImportService As ImportService
 Private PreviewService As PreviewService
 Private MappingService As MappingService
+Private ValidationService As ValidationService
 ' --- Step 1 ---
 Private WithEvents vProject As vProject
 Attribute vProject.VB_VarHelpID = -1
@@ -49,6 +51,7 @@ Private Sub Class_Initialize()
     Set ImportService = New ImportService
     Set PreviewService = New PreviewService
     Set MappingService = New MappingService
+    Set ValidationService = New ValidationService
     Set GLEntity = New GLEntity
     Set GLService = New GLService
     Set TBEntity = New TBEntity
@@ -59,8 +62,9 @@ End Sub
 ' ====== vMain ======
 Private Sub vMain_DoExit()
     ' -> Save AppConfig <-
-    Unload vMain
-    Set vMain = Nothing
+    ' Unload vMain
+    ' Set vMain = Nothing
+    vMain.Hide
 End Sub
 
 Private Sub vMain_DoStep1()
@@ -92,6 +96,8 @@ Private Sub vProject_DoExit()
 End Sub
 
 Private Sub vProject_DoConfirm()
+    Call PopulateFormComboBoxes(vTBConfig, "TB") ' 將 TB 欄位注入至 vTBConfig
+    ' 移至下個視窗
     Call vProject.Hide
     Call vTBConfig.Show(vbModeless)
     vMain.lblProject.BackColor = vbYellow
@@ -108,11 +114,13 @@ Private Sub vTBConfig_DoImport()
 End Sub
 
 Private Sub vTBConfig_DoPreview()
-    '  在工作表預覽資料表 TB
-    Call PreviewTable("TB")
+    Call PreviewTable("TB") ' 在工作表預覽資料表 TB
 End Sub
 
 Private Sub vTBConfig_DoConfirm()
+    Call ProcessAndStoreFormMappings(vTBConfig, "TB") ' 處理並儲存 TB 欄位配對
+    Call PopulateFormComboBoxes(vGLConfig, "GL") ' 將 GL 欄位注入至 vGLConfig
+    ' 移至下個視窗
     Call vTBConfig.Hide
     Call vGLConfig.Show(vbModeless)
     vMain.lblImportTB.BackColor = vbYellow
@@ -129,12 +137,11 @@ Private Sub vGLConfig_DoImport()
 End Sub
 
 Private Sub vGLConfig_DoPreview()
-    ' 在工作表預覽資料表 GL
-    Call PreviewTable("GL")
+    Call PreviewTable("GL") ' 在工作表預覽資料表 GL
 End Sub
 
 Private Sub vGLConfig_DoConfirm()
-    
+    Call ProcessAndStoreFormMappings(vGLConfig, "GL") ' 處理並儲存 GL 欄位配對
     ' 移至下個視窗
     Call vGLConfig.Hide
     vMain.lblImportGL.BackColor = vbYellow
@@ -147,6 +154,7 @@ Private Sub vValidation_DoExit()
 End Sub
 
 Private Sub vValidation_TestCompleteness()
+    Call ValidationService.TestCompleteness
     vMain.lblCompletenessTest.BackColor = vbYellow
 End Sub
 
@@ -305,3 +313,116 @@ ErrorHandler:
            "來源: " & Err.Source & vbCrLf & _
            "描述: " & Err.Description, vbCritical, "預覽錯誤"
 End Sub
+
+' --- 通用方法，準備並填充指定表單的 ComboBox ---
+Private Sub PopulateFormComboBoxes(ByVal targetForm As Object, ByVal tableName As String)
+    Const METHOD_NAME As String = "PrepareAndPopulateFormComboBoxes"
+    Dim fieldNames As Variant
+    Dim dal As AccessDAL ' 臨時 DAL 物件
+    Dim dbPath As String
+
+    On Error GoTo ErrorHandler
+
+    ' 檢查 targetForm 是否有效
+    If targetForm Is Nothing Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: targetForm 為 Nothing。"
+        Exit Sub
+    End If
+
+    ' --- 1. 取得指定資料表的欄位名稱 ---
+    dbPath = ThisWorkbook.Path & "\" & DATABASE_NAME ' 取得資料庫路徑
+    If Dir(dbPath) = "" Then
+        MsgBox "找不到資料庫檔案：" & vbCrLf & dbPath, vbCritical, MODULE_NAME & "." & METHOD_NAME
+        fieldNames = Empty ' 設定為 Empty
+    Else
+        Set dal = New AccessDAL ' 建立 DAL 實例
+        dal.DatabasePath = dbPath ' 設定路徑
+        fieldNames = dal.GetTableFieldNames(tableName) ' 呼叫函數
+        Set dal = Nothing ' 立即釋放 DAL 物件
+    End If
+
+    ' --- 2. 將欄位名稱注入目標表單 ---
+    '    這裡假設 targetForm 有一個名為 PopulateComboBoxes 的 Public Sub
+    '    使用 On Error Resume Next 處理 targetForm 可能沒有此方法的情況 (雖然最好確保有)
+    On Error Resume Next
+    CallByName targetForm, "PopulateComboBoxes", VbMethod, fieldNames
+    If Err.Number <> 0 Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 警告: 無法呼叫 '" & TypeName(targetForm) & ".PopulateComboBoxes'。錯誤: " & Err.Description
+        Err.Clear
+    End If
+    On Error GoTo ErrorHandler ' 恢復正常的錯誤處理
+
+CleanUp:
+    Set dal = Nothing ' 確保錯誤時也釋放
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "準備填充表單 '" & TypeName(targetForm) & "' 時發生錯誤 (資料表: " & tableName & ")：" & vbCrLf & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
+    ' 嘗試填充空值
+    On Error Resume Next
+    CallByName targetForm, "PopulateComboBoxes", VbMethod, Empty
+    Err.Clear
+    On Error GoTo 0 ' 關閉此處的錯誤處理
+    GoTo CleanUp
+End Sub
+
+' --- 新增: 通用方法，處理並儲存指定表單的欄位對應 ---
+Private Function ProcessAndStoreFormMappings(ByVal sourceForm As Object, ByVal mappingType As String) As Boolean
+    Const METHOD_NAME As String = "ProcessAndStoreFormMappings"
+    Dim formMappings As Object ' Scripting.Dictionary
+
+    On Error GoTo ErrorHandler
+
+    ' --- 1. 檢查輸入參數 ---
+    If sourceForm Is Nothing Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: sourceForm object is Nothing."
+        MsgBox "來源表單物件無效。", vbCritical, MODULE_NAME & "." & METHOD_NAME
+        GoTo CleanUp ' 返回 False
+    End If
+    If MappingService Is Nothing Then
+         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: MappingService object is Nothing."
+         MsgBox "對應服務尚未初始化。", vbCritical, MODULE_NAME & "." & METHOD_NAME
+         GoTo CleanUp ' 返回 False
+    End If
+
+    ' --- 2. 從來源表單取得欄位對應 ---
+    '    假設 sourceForm 有 GetFieldMappings 方法
+    On Error Resume Next ' 暫時忽略錯誤，以便檢查
+    Set formMappings = sourceForm.GetFieldMappings()
+    If Err.Number <> 0 Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error calling GetFieldMappings on " & TypeName(sourceForm) & ": " & Err.Description
+        MsgBox "無法從 '" & TypeName(sourceForm) & "' 表單讀取欄位對應。", vbCritical, MODULE_NAME & "." & METHOD_NAME
+        Err.Clear
+        GoTo CleanUp ' 返回 False
+    End If
+    On Error GoTo ErrorHandler ' 恢復正常錯誤處理
+
+    ' --- 3. 驗證對應是否成功取得 ---
+    If formMappings Is Nothing Then
+        ' GetFieldMappings 內部應該已經顯示錯誤訊息
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: Failed to get mappings from " & TypeName(sourceForm) & "."
+        GoTo CleanUp ' 返回 False
+    End If
+
+    ' --- 4. 將對應關係傳遞給 MappingService ---
+    Select Case UCase$(mappingType) ' 根據類型呼叫不同的 Set 方法
+        Case "TB"
+            Call MappingService.SetTBFieldMappings(formMappings)
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - TB field mappings passed to MappingService."
+        Case "GL"
+            Call MappingService.SetGLFieldMappings(formMappings)
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - GL field mappings passed to MappingService."
+        Case Else
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: Unknown mappingType '" & mappingType & "'."
+            MsgBox "不支援的對應類型：" & mappingType, vbCritical, MODULE_NAME & "." & METHOD_NAME
+            GoTo CleanUp ' 返回 False
+    End Select
+
+CleanUp:
+    Set formMappings = Nothing
+    Exit Function
+
+ErrorHandler:
+    MsgBox "處理 '" & mappingType & "' 欄位對應時發生錯誤：" & vbCrLf & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
+    GoTo CleanUp
+End Function

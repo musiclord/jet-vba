@@ -29,6 +29,7 @@ Option Explicit
 '  - ButtonConfirm: 確認按鈕，點擊時觸發 DoConfirm 事件
 '  - ButtonExit: 退出按鈕，點擊時觸發 DoExit 事件
 
+
 Public Event DoConfirm()
 Public Event DoExit()
 

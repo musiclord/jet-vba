@@ -169,7 +169,7 @@ Private Sub PopulateTableList()
          vMain.ListTable.AddItem "(讀取資料表時傳回非預期類型)"
          ' 保持禁用狀態
     End If
-Cleanup:
+CleanUp:
     Exit Sub
 ErrorHandler:
      ' 確保 ComboBox 在錯誤時保持禁用狀態
@@ -181,7 +181,7 @@ ErrorHandler:
          On Error GoTo 0
      End If
      MsgBox "讀取資料庫資料表列表時發生錯誤。" & vbCrLf & "請檢查資料庫連接或聯繫管理員。", vbCritical, "讀取錯誤"
-     GoTo Cleanup
+     GoTo CleanUp
 End Sub
 
 '-------------------------------------------------------------------------------

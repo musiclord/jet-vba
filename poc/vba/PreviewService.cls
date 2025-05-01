@@ -30,7 +30,7 @@ Public Function GetAccessTableNames(ByVal accessDbPath As String) As Variant
 
     GetAccessTableNames = tableNames ' Return the variant array
 
-Cleanup:
+CleanUp:
     Set dal = Nothing
     Exit Function
 
@@ -42,7 +42,7 @@ ErrorHandler:
     ' Let the caller (cApplication) handle the error message to the user
     ' Return Empty to indicate failure
     GetAccessTableNames = Empty
-    GoTo Cleanup
+    GoTo CleanUp
 End Function
 
 Private Function FindOrCreatePreviewSheet() As Worksheet
@@ -171,7 +171,7 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
         Next i
 
         ' 自動調整欄寬
-        ws.Columns.AutoFit
+        ws.columns.AutoFit
     Else
         ' 處理空資料表：如果可能，寫入標頭
         If Not rs Is Nothing Then
@@ -179,7 +179,7 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
                  For i = 0 To rs.Fields.Count - 1
                     ws.Cells(1, i + 1).value = rs.Fields(i).Name
                 Next i
-                ws.Columns.AutoFit
+                ws.columns.AutoFit
              Else
                  ws.Cells(1, 1).value = "Table [" & tableName & "] exists but has no columns or could not be read."
              End If
@@ -195,7 +195,7 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
     ' 7. 成功 (原步驟 10)
     ShowPreview = True
 
-Cleanup:
+CleanUp:
     On Error Resume Next
     If Not rs Is Nothing Then If rs.State = 1 Then rs.Close
     Set rs = Nothing
@@ -214,6 +214,7 @@ ErrorHandler:
     Application.ScreenUpdating = True
     ' 將錯誤引發給呼叫者 (cApplication)
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo Cleanup
+    GoTo CleanUp
 End Function
+
 

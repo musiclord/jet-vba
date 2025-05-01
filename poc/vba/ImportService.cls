@@ -44,11 +44,11 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
     ' --- 2. 檢查檔案是否存在 ---
     If Not fso.FileExists(csvFilePath) Then
         Err.Raise vbObjectError + 513, MODULE_NAME & ".ImportToAccess", "CSV 檔案未找到: " & csvFilePath
-        GoTo Cleanup
+        GoTo CleanUp
     End If
     If Not fso.FileExists(accessDbPath) Then
         Err.Raise vbObjectError + 514, MODULE_NAME & ".ImportToAccess", "Access 資料庫未找到: " & accessDbPath
-        GoTo Cleanup
+        GoTo CleanUp
     End If
 
     ' --- 3. 設定 ADODB.Stream ---
@@ -100,7 +100,7 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
         Debug.Print "CSV Headers read (" & columnCount & " columns): " & Join(headers, "|")
     Else
         Err.Raise vbObjectError + 515, MODULE_NAME & ".ImportToAccess", "CSV 檔案為空或無法讀取標頭。"
-        GoTo Cleanup
+        GoTo CleanUp
     End If
 
     ' c. 建立新表格 (所有欄位為 TEXT)
@@ -160,7 +160,7 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
     ' --- 8. 完成 ---
     ImportToAccess = True
 
-Cleanup:
+CleanUp:
     On Error Resume Next
     If Not adoStream Is Nothing Then
         If adoStream.State = adStateOpen Then adoStream.Close
@@ -189,24 +189,24 @@ ErrorHandler:
         End If
     End If
     ImportToAccess = False
-    GoTo Cleanup
+    GoTo CleanUp
 End Function
 
 ' --- 輔助函數：更可靠地分割 CSV 行 (處理引號) ---
 Private Function SplitCSVLine(ByVal TextLine As String, Optional ByVal Delimiter As String = ",") As String()
-    Dim Result() As String
+    Dim result() As String
     Dim CurrentField As String
     Dim InQuotes As Boolean
     Dim Char As String
     Dim i As Long, j As Long
 
-    ReDim Result(0 To 0)
+    ReDim result(0 To 0)
     j = 0
     InQuotes = False
     CurrentField = ""
 
     If TextLine = "" Then
-        SplitCSVLine = Result ' Return array with one empty element for empty line
+        SplitCSVLine = result ' Return array with one empty element for empty line
         Exit Function
     End If
 
@@ -228,9 +228,9 @@ Private Function SplitCSVLine(ByVal TextLine As String, Optional ByVal Delimiter
         Else ' Not in quotes
             If Char = Delimiter Then
                 ' End of field
-                Result(j) = CurrentField
+                result(j) = CurrentField
                 j = j + 1
-                ReDim Preserve Result(0 To j)
+                ReDim Preserve result(0 To j)
                 CurrentField = ""
             ElseIf Char = """" And CurrentField = "" Then ' Allow quotes only at start of field
                 InQuotes = True ' Start of quoted field
@@ -241,6 +241,7 @@ Private Function SplitCSVLine(ByVal TextLine As String, Optional ByVal Delimiter
     Next i
 
     ' Add the last field
-    Result(j) = CurrentField
-    SplitCSVLine = Result
+    result(j) = CurrentField
+    SplitCSVLine = result
 End Function
+
