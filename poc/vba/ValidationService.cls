@@ -11,145 +11,192 @@ Option Explicit
 
 Private Const MODULE_NAME As String = "ValidationService"
 
-' --- 假設的初始化 ---
-Private Sub Class_Initialize()
-    ' 在實際應用中，DAL 和 MappingService 需要被正確實例化和注入
-    ' Set dal = New AccessDAL
-    ' dal.DatabasePath = ... ' 設定路徑
-    ' Set MappingService = ... ' 獲取 MappingService 實例
-    Debug.Print MODULE_NAME & " Initialized (DAL/MappingService should be set)."
+Private m_AccessDAL As AccessDAL
+Private m_MappingService As MappingService
+Private m_GLTableName As String ' Access 中 GL 資料的實際資料表名稱
+Private m_TBTableName As String ' Access 中 TB 資料的實際資料表名稱
+
+' 初始化方法，用於注入依賴項和資料表名稱
+Public Sub Initialize(ByVal dal As AccessDAL, ByVal ms As MappingService, ByVal glImportTableName As String, ByVal tbImportTableName As String)
+    Const METHOD_NAME As String = "Initialize"
+    On Error GoTo ErrorHandler
+
+    Set m_AccessDAL = dal
+    Set m_MappingService = ms
+    m_GLTableName = glImportTableName
+    m_TBTableName = tbImportTableName
+
+    If m_AccessDAL Is Nothing Then Err.Raise vbObjectError + 513, MODULE_NAME & "." & METHOD_NAME, "AccessDAL 物件未提供。"
+    If m_MappingService Is Nothing Then Err.Raise vbObjectError + 513, MODULE_NAME & "." & METHOD_NAME, "MappingService 物件未提供。"
+    If Len(m_GLTableName) = 0 Then Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "GL 資料表名稱未提供。"
+    If Len(m_TBTableName) = 0 Then Err.Raise vbObjectError + 515, MODULE_NAME & "." & METHOD_NAME, "TB 資料表名稱未提供。"
+
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " 初始化成功。"
+    Exit Sub
+ErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & ": " & Err.Description
+    Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
 End Sub
 
-'-------------------------------------------------------------------------------
-' Function:  TestCompleteness (當前版本 - 僅計算差異數量)
-' Purpose:   執行 GL 與 TB 的基礎完整性對平測試。
-'            此版本旨在計算 GL 彙總變動與 TB 記錄變動之間存在顯著差異的科目數量。
-'            其核心邏輯與先前討論的 IDEA 腳本 (#file:caseware_idea_vba.bas)
-'            中的步驟相似，但目前**簡化**了實現：
-'            1. 彙總 GL 變動 (對應 IDEA Summarization)。
-'            2. 與 TB 資料連接 (對應 IDEA Join，但目前使用 LEFT JOIN)。
-'            3. 計算差異 (對應 IDEA Append Field 'DIFF')。
-'            4. 篩選並計數差異 (對應 IDEA Extraction with Criteria)。
-'            **注意：此版本目前使用硬編碼的欄位名稱和表名，且未實現日期篩選和差異明細輸出。**
-' Arguments: 無 (未來應加入 StartDate, EndDate)。
-' Returns:   Boolean - True 表示測試通過 (差異數量為 0)，False 表示失敗 (差異數量 > 0) 或執行出錯。
-'-------------------------------------------------------------------------------
-Public Function TestCompleteness() As Boolean
-    Const METHOD_NAME As String = "TestCompleteness" ' 方法名稱，方便除錯
+' 執行完整性測試
+' 如果完整 (無差異) 則返回 True，否則返回 False。
+' 如果存在差異，則會產生一個名為 COMPLETENESS_DIFFERENCES_TABLE_NAME 的資料表，其中包含差異明細。
+Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date) As Boolean
+    Const METHOD_NAME As String = "TestCompleteness"
+    Dim glMappings As Object 'Scripting.Dictionary
+    Dim tbMappings As Object 'Scripting.Dictionary
+    Dim glAccountField As String, glAmountField As String, glDateField As String
+    Dim tbAccountField As String, tbChangeField As String ' 假設這是 TB 中的 "變動金額" 欄位
     Dim sql As String
+    Dim recordsAffected As Long
     Dim differenceCount As Long
-    Dim result As Variant ' **重要：使用 Variant 接收 GetScalar 結果**
-    Const TOLERANCE As Double = 0.01 ' 定義可接受的差異容錯值
 
-    On Error GoTo ErrorHandler ' **啟用結構化錯誤處理**
-    TestCompleteness = False ' 預設為失敗
+    On Error GoTo ErrorHandler
+    TestCompleteness = False ' 預設為失敗或找到差異
 
-    ' --- 1. 確保 DAL 實例存在 ---
-    ' 檢查資料存取層物件是否已準備就緒。
-    If dal Is Nothing Then
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤：DAL 物件尚未初始化。"
-        Exit Function ' 或者觸發錯誤 Err.Raise ...
+    ' --- 1. 驗證依賴項 ---
+    If m_AccessDAL Is Nothing Or m_MappingService Is Nothing Then
+        Err.Raise vbObjectError + 512, MODULE_NAME & "." & METHOD_NAME, "服務尚未初始化，請先呼叫 Initialize。"
+        GoTo CleanUp
+    End If
+    If Not m_AccessDAL.IsConnected Then
+        MsgBox "資料庫尚未連接，無法執行完整性測試。", vbCritical, "資料庫錯誤"
+        GoTo CleanUp
     End If
 
-    ' --- 2. 構建 SQL 查詢 ---
-    ' 核心邏輯：計算 GL 變動與 TB 變動之間差異大於容錯值的科目數量。
-    ' # AI Guidance: 目前 SQL 使用硬編碼欄位 (GL.AccountNo, GL.Amount, TB.AccountNo, TB.Change)。
-    ' # AI Guidance: 未來應修改此 SQL，使其動態使用從 MappingService 獲取的欄位名稱。
-    ' # AI Guidance: 例如，將 "GL.AccountNo" 替換為 "[" & glMappings("AccountNo") & "]"。
-    ' # AI Guidance: 同時，GL.Amount 的計算邏輯 (Sum(GL.Amount)) 需要根據映射的金額欄位 (單一金額+借貸標記 或 借/貸分開) 動態生成，
-    ' # AI Guidance: 類似於之前討論的 glAmtExpr 變數。
-    ' # AI Guidance: TB.Change 也應動態計算 (Nz(EndBalance, 0) - Nz(BeginBalance, 0))。
-    ' # AI Guidance: 未加入日期篩選，目前是對 GL 表所有記錄進行彙總。未來應加入 WHERE GL.PostDate BETWEEN StartDate AND EndDate。
-    sql = "SELECT Count(*) AS DifferenceCount " & _
+    ' --- 2. 獲取欄位對應 ---
+    Set glMappings = m_MappingService.GetGLFieldMappings()
+    Set tbMappings = m_MappingService.GetTBFieldMappings()
+
+    If glMappings Is Nothing Or glMappings.Count = 0 Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: GL 欄位對應未設定。"
+        MsgBox "GL 欄位對應尚未設定，無法執行完整性測試。", vbExclamation, "欄位對應錯誤"
+        GoTo CleanUp
+    End If
+    If tbMappings Is Nothing Or tbMappings.Count = 0 Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: TB 欄位對應未設定。"
+        MsgBox "TB 欄位對應尚未設定，無法執行完整性測試。", vbExclamation, "欄位對應錯誤"
+        GoTo CleanUp
+    End If
+
+    ' 檢索對應的欄位名稱 (確保這些標準鍵在 MappingService 中存在)
+    ' 這些標準鍵 ("AccountNumber", "Amount", "PostDate", "ChangeAmount") 必須在
+    ' cApplication 呼叫 MappingService.SetGLFieldMappings 和 SetTBFieldMappings 時一致使用。
+    On Error Resume Next ' 暫時忽略字典鍵不存在的錯誤，稍後檢查
+    glAccountField = glMappings("AccountNumber")
+    glAmountField = glMappings("Amount")
+    glDateField = glMappings("PostDate")
+    tbAccountField = tbMappings("AccountNumber")
+    tbChangeField = tbMappings("ChangeAmount") ' 重要: 假設 TB 對應中有 "ChangeAmount"
+    On Error GoTo ErrorHandler ' 恢復正常錯誤處理
+
+    If Len(glAccountField) = 0 Or Len(glAmountField) = 0 Or Len(glDateField) = 0 Or Len(tbAccountField) = 0 Or Len(tbChangeField) = 0 Then
+        Dim missingFields As String
+        If Len(glAccountField) = 0 Then missingFields = missingFields & "GL AccountNumber, "
+        If Len(glAmountField) = 0 Then missingFields = missingFields & "GL Amount, "
+        If Len(glDateField) = 0 Then missingFields = missingFields & "GL PostDate, "
+        If Len(tbAccountField) = 0 Then missingFields = missingFields & "TB AccountNumber, "
+        If Len(tbChangeField) = 0 Then missingFields = missingFields & "TB ChangeAmount, "
+        If Len(missingFields) > 0 Then missingFields = Left(missingFields, Len(missingFields) - 2) ' Remove trailing comma
+
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: 以下必要的欄位對應缺失: " & missingFields
+        MsgBox "部分必要的 GL 或 TB 欄位對應缺失 (" & missingFields & ")，無法執行完整性測試。", vbExclamation, "欄位對應缺失"
+        GoTo CleanUp
+    End If
+
+    ' --- 3. 準備資料庫: 如果存在舊的差異表，則刪除 ---
+    If m_AccessDAL.TableExists(COMPLETENESS_DIFFERENCES_TABLE_NAME) Then
+        If Not m_AccessDAL.ExecuteSQL("DROP TABLE [" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "]") Then
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: 無法刪除已存在的資料表 '" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "'。"
+            MsgBox "無法刪除舊的差異表 '" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "'。", vbCritical, "資料庫錯誤"
+            GoTo CleanUp
+        End If
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 已刪除存在的資料表: " & COMPLETENESS_DIFFERENCES_TABLE_NAME
+    End If
+
+    ' --- 4. 建構並執行 SQL 以查找並儲存差異 ---
+    ' 使用 UNION ALL 合併 GL 總和與 TB 變動，然後按科目分組，
+    ' 並將存在差異的科目選入新資料表。
+    sql = "SELECT " & _
+          "    Combined.AccountKey AS AccountNo, " & _
+          "    SUM(Combined.GL_Sum_Period) AS GL_Total_Amount, " & _
+          "    SUM(Combined.TB_Change_Period) AS TB_Total_Change, " & _
+          "    Nz(SUM(Combined.GL_Sum_Period), 0) - Nz(SUM(Combined.TB_Change_Period), 0) AS Difference " & _
+          "INTO [" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "] " & _
           "FROM ( " & _
-              "SELECT " & _
-                  ' 計算差異：TB 變動 - GL 變動。Nz() 用於處理某科目只存在於一個表的情況 (因 LEFT JOIN)。
-                  "(Nz(TB.Change, 0) - Nz(QGL.GL_Movement, 0)) AS Difference " & _
-              "FROM ( " & _
-                  ' 子查詢 QGL：彙總 GL 表，按科目編號加總金額，計算 GL 方的淨變動。
-                  ' 對應 IDEA 步驟：篩選期間 (目前缺少) -> 計算帶號金額 (目前假設 Amount 已帶號) -> Summarization。
-                  "SELECT GL.AccountNo, Sum(GL.Amount) AS GL_Movement " & _
-                  "FROM GL GROUP BY GL.AccountNo " & _
-              ") AS QGL " & _
-              ' 將 GL 彙總結果 (QGL) 左連接到 TB 表。
-              ' # AI Guidance: 為完全模擬 IDEA 的 "All records in both files"，應改用更複雜的 FULL OUTER JOIN 模擬 (如之前討論的 UNION ALL 方法)。
-              ' # AI Guidance: 目前 LEFT JOIN 可能會遺漏只存在於 TB 而不存在於 GL 的科目差異 (雖然理論上不應發生)。
-              "LEFT JOIN TB ON QGL.AccountNo = TB.AccountNo " & _
-          ") AS Comp " & _
-          ' 篩選條件：只計算差異絕對值大於容錯值的記錄數。
-          "WHERE Abs(Comp.Difference) > " & CStr(TOLERANCE) & ";" ' 使用 CStr 確保數值轉字串正確
+          "    SELECT " & _
+          "        [" & EscapeSQLField(glAccountField) & "] AS AccountKey, " & _
+          "        SUM([" & EscapeSQLField(glAmountField) & "]) AS GL_Sum_Period, " & _
+          "        0 AS TB_Change_Period " & _
+          "    FROM [" & m_GLTableName & "] " & _
+          "    WHERE [" & EscapeSQLField(glDateField) & "] >= #" & Format(startDate, "yyyy-mm-dd") & "# AND [" & EscapeSQLField(glDateField) & "] <= #" & Format(endDate, "yyyy-mm-dd") & "# " & _
+          "    GROUP BY [" & EscapeSQLField(glAccountField) & "] " & _
+          "    UNION ALL " & _
+          "    SELECT " & _
+          "        [" & EscapeSQLField(tbAccountField) & "] AS AccountKey, " & _
+          "        0 AS GL_Sum_Period, " & _
+          "        SUM([" & EscapeSQLField(tbChangeField) & "]) AS TB_Change_Period " & _
+          "    FROM [" & m_TBTableName & "] " & _
+          "    GROUP BY [" & EscapeSQLField(tbAccountField) & "] " & _
+          ") AS Combined " & _
+          "GROUP BY Combined.AccountKey " & _
+          "HAVING Nz(SUM(Combined.GL_Sum_Period), 0) - Nz(SUM(Combined.TB_Change_Period), 0) <> 0"
 
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 執行 SQL: " & sql
 
-    ' --- 3. 調用 DAL 的 GetScalar 方法 ---
-    ' 執行 SQL 查詢並獲取單一結果 (差異計數)。
-    result = dal.GetScalar(sql) ' 接收為 Variant 以處理可能的錯誤或非預期類型
-
-    ' --- 4. **健壯地處理 GetScalar 返回值** ---
-    ' 檢查 GetScalar 的返回結果是否有效。
-    If IsError(result) Then ' 檢查是否返回了 VBA 錯誤值 (例如 CVErr)
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - GetScalar 方法返回錯誤值。"
-        ' 假設錯誤已在 DAL 層記錄，此處不再重複 MsgBox，直接返回 False
+    If Not m_AccessDAL.ExecuteSQL(sql, recordsAffected) Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: SQL 執行失敗，無法建立差異表。"
+        MsgBox "執行完整性測試 SQL 失敗，無法產生差異表。", vbCritical, "SQL 執行錯誤"
         GoTo CleanUp
-    ElseIf IsNull(result) Then ' Count(*) 正常不應返回 Null，但以防萬一
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - GetScalar 方法返回 Null。"
-        GoTo CleanUp ' 視為異常，返回 False
-    ElseIf Not IsNumeric(result) Then ' 確保返回的是數值
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - GetScalar 方法返回非數值: '" & CStr(result) & "'"
-        GoTo CleanUp ' 視為異常，返回 False
-    Else
-        ' --- 5. 安全轉換並判斷結果 ---
-        ' 確認是有效數值後，轉換為 Long 並判斷差異。
-        differenceCount = CLng(result)
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 發現差異記錄數量: " & differenceCount
+    End If
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 差異表 SQL 已執行。SELECT INTO 影響的記錄數: " & recordsAffected
 
-        If differenceCount = 0 Then
-            TestCompleteness = True ' 沒有顯著差異，測試通過
-            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 測試通過：未發現顯著差異。"
-        Else
-            TestCompleteness = False ' 存在顯著差異，測試失敗
-            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 測試失敗：發現 " & differenceCount & " 筆顯著差異。"
-            ' # AI Guidance: 測試失敗時，應觸發生成差異明細表 (COMPLETENESS) 的邏輯。
-            ' # AI Guidance: 可以呼叫另一個私有方法，該方法執行之前討論的 "SELECT INTO COMPLETENESS" SQL。
-        End If
+    ' --- 5. 檢查是否找到差異 ---
+    differenceCount = m_AccessDAL.GetRecordCount(COMPLETENESS_DIFFERENCES_TABLE_NAME)
+    If differenceCount = -1 Then ' GetRecordCount 在錯誤時返回 -1 (例如，資料表未找到)
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: 無法獲取 '" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "' 的記錄數。"
+        MsgBox "無法讀取差異表 '" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "' 的記錄數量。", vbCritical, "資料庫錯誤"
+        TestCompleteness = False ' 指示失敗
+    ElseIf differenceCount = 0 Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 測試完成。未發現差異。"
+        TestCompleteness = True ' 測試通過，無差異
+    Else
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 測試完成。在 '" & COMPLETENESS_DIFFERENCES_TABLE_NAME & "' 中找到 " & differenceCount & " 筆差異。"
+        TestCompleteness = False ' 測試失敗，找到差異
     End If
 
-CleanUp: ' 清理出口點
-    Exit Function ' 正常或經過錯誤處理後退出
+CleanUp:
+    Set glMappings = Nothing
+    Set tbMappings = Nothing
+    Exit Function
 
-ErrorHandler: ' 錯誤處理標籤
-    TestCompleteness = False ' 確保錯誤時函數返回 False
-    ' 記錄詳細錯誤信息，方便追蹤問題。
-    Debug.Print "--- " & MODULE_NAME & "." & METHOD_NAME & " 錯誤 ---"
-    Debug.Print "SQL (若適用): " & sql ' 記錄當時執行的 SQL
-    Debug.Print "錯誤描述: " & Err.Description & " (" & Err.Number & ")"
-    ' MsgBox "執行完整性測試時發生未預期的錯誤。", vbCritical, "內部錯誤" ' 可選：顯示通用錯誤給使用者
-    GoTo CleanUp ' 跳轉到清理步驟
+ErrorHandler:
+    TestCompleteness = False ' 確保錯誤時返回 False
+    Debug.Print "!!! 錯誤於 " & MODULE_NAME & "." & METHOD_NAME & " !!!"
+    Debug.Print "錯誤號碼: " & Err.Number
+    Debug.Print "錯誤來源: " & Err.Source
+    Debug.Print "錯誤描述: " & Err.Description
+    MsgBox "在 " & MODULE_NAME & "." & METHOD_NAME & " 中發生錯誤：" & vbCrLf & Err.Description, vbCritical, "執行錯誤"
+    GoTo CleanUp
 End Function
 
-' --- 其他 ValidationService 方法 ---
+' 輔助函數，用於轉義可能包含空格或特殊字元的欄位名稱
+Private Function EscapeSQLField(ByVal fieldName As String) As String
+    If InStr(1, fieldName, " ") > 0 Or InStr(1, fieldName, "[") > 0 Or InStr(1, fieldName, "]") > 0 Or InStr(1, fieldName, """") > 0 Or InStr(1, fieldName, "'") > 0 Or InStr(1, fieldName, "-") > 0 Or InStr(1, fieldName, ".") > 0 Then
+        EscapeSQLField = "[" & Replace(fieldName, "]", "]]") & "]" ' 基本的括號處理，可以更穩健
+    Else
+        EscapeSQLField = fieldName
+    End If
+End Function
 
-' # AI Guidance: 未來可添加一個私有方法來生成差異明細表
-' Private Sub CreateCompletenessTable(ByVal StartDate As Date, ByVal EndDate As Date)
-'     ' 實作之前討論的 "SELECT INTO COMPLETENESS" 邏輯
-'     ' 需要動態構建 SQL，包含所有映射欄位、日期篩選、FULL JOIN 模擬等
-'     Const METHOD_NAME As String = "CreateCompletenessTable"
-'     Dim sqlDrop As String, sqlMakeTable As String
-'     ' ... 獲取映射 ...
-'     ' ... 構建 SQL ...
-'     sqlDrop = "DROP TABLE COMPLETENESS;"
-'     sqlMakeTable = "SELECT ... INTO COMPLETENESS FROM ... WHERE Abs(Difference) > " & CStr(TOLERANCE) & ";"
-'     On Error Resume Next
-'     dal.ExecuteSQL sqlDrop
-'     On Error GoTo ErrorHandler_CreateTable
-'     If dal.ExecuteSQL(sqlMakeTable) Then
-'         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - COMPLETENESS 表已成功創建/更新。"
-'     Else
-'         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 創建 COMPLETENESS 表失敗。"
-'     End If
-'     Exit Sub
-' ErrorHandler_CreateTable:
-'     Debug.Print "--- ERROR in " & MODULE_NAME & "." & METHOD_NAME & " ---"
-'     ' ... 記錄錯誤 ...
-' End Sub
+Private Sub Class_Initialize()
+    ' m_AccessDAL, m_MappingService 和資料表名稱預計會透過 Public Initialize Sub 設定。
+    Debug.Print MODULE_NAME & " Class_Initialize"
+End Sub
+
+Private Sub Class_Terminate()
+    Set m_AccessDAL = Nothing
+    Set m_MappingService = Nothing
+    Debug.Print MODULE_NAME & " Class_Terminate"
+End Sub
 

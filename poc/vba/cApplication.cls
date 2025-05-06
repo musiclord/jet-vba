@@ -156,7 +156,7 @@ Private Sub vValidation_DoExit()
 End Sub
 
 Private Sub vValidation_TestCompleteness()
-    ' Call ValidationService.TestCompleteness
+    Call ValidationService.TestCompleteness
     vMain.lblCompletenessTest.BackColor = vbYellow
 End Sub
 
