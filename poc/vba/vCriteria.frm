@@ -1,10 +1,10 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vCriteria 
    Caption         =   "Criteria"
-   ClientHeight    =   7410
+   ClientHeight    =   8415.001
    ClientLeft      =   120
    ClientTop       =   465
-   ClientWidth     =   7755
+   ClientWidth     =   8760.001
    OleObjectBlob   =   "vCriteria.frx":0000
    StartUpPosition =   1  '©ÒÄÝµøµ¡¤¤¥¡
 End

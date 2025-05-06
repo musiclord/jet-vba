@@ -10,8 +10,6 @@ Attribute VB_Exposed = False
 Option Explicit
 
 Private Const MODULE_NAME As String = "ValidationService"
-Private dal As AccessDAL ' 假設已初始化
-Private MappingService As MappingService ' 假設已初始化
 
 ' --- 假設的初始化 ---
 Private Sub Class_Initialize()

@@ -344,8 +344,7 @@ Private Sub PopulateFormComboBoxes(ByVal targetForm As Object, ByVal tableName A
     End If
 
     ' --- 2. 將欄位名稱注入目標表單 ---
-    '    這裡假設 targetForm 有一個名為 PopulateComboBoxes 的 Public Sub
-    '    使用 On Error Resume Next 處理 targetForm 可能沒有此方法的情況 (雖然最好確保有)
+    ' targetForm 有一個名為 PopulateComboBoxes 的 Public Sub
     On Error Resume Next
     CallByName targetForm, "PopulateComboBoxes", VbMethod, fieldNames
     If Err.Number <> 0 Then
@@ -375,19 +374,7 @@ Private Function ProcessAndStoreFormMappings(ByVal sourceForm As Object, ByVal m
 
     On Error GoTo ErrorHandler
 
-    ' --- 1. 檢查輸入參數 ---
-    If sourceForm Is Nothing Then
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: sourceForm object is Nothing."
-        MsgBox "來源表單物件無效。", vbCritical, MODULE_NAME & "." & METHOD_NAME
-        GoTo CleanUp ' 返回 False
-    End If
-    If MappingService Is Nothing Then
-         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: MappingService object is Nothing."
-         MsgBox "對應服務尚未初始化。", vbCritical, MODULE_NAME & "." & METHOD_NAME
-         GoTo CleanUp ' 返回 False
-    End If
-
-    ' --- 2. 從來源表單取得欄位對應 ---
+    ' --- 從來源表單取得欄位對應 ---
     '    假設 sourceForm 有 GetFieldMappings 方法
     On Error Resume Next ' 暫時忽略錯誤，以便檢查
     Set formMappings = sourceForm.GetFieldMappings()
@@ -399,14 +386,14 @@ Private Function ProcessAndStoreFormMappings(ByVal sourceForm As Object, ByVal m
     End If
     On Error GoTo ErrorHandler ' 恢復正常錯誤處理
 
-    ' --- 3. 驗證對應是否成功取得 ---
+    ' ---  驗證對應是否成功取得 ---
     If formMappings Is Nothing Then
         ' GetFieldMappings 內部應該已經顯示錯誤訊息
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: Failed to get mappings from " & TypeName(sourceForm) & "."
         GoTo CleanUp ' 返回 False
     End If
 
-    ' --- 4. 將對應關係傳遞給 MappingService ---
+    ' ---  將對應關係傳遞給 MappingService ---
     Select Case UCase$(mappingType) ' 根據類型呼叫不同的 Set 方法
         Case "TB"
             Call MappingService.SetTBFieldMappings(formMappings)

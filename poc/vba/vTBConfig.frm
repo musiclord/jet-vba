@@ -49,12 +49,15 @@ Private Sub UserForm_Initialize()
     Debug.Print Me.Name & " Initialized."
 End Sub
 
-' --- 新增: 公共方法，用於取得使用者設定的 TB 欄位對應 ---
+' --- 新增: 公共方法，用於取得使用者設定的欄位對應 ---
 Public Function GetFieldMappings() As Object ' Returns Scripting.Dictionary
     Const METHOD_NAME As String = "GetFieldMappings"
     Dim mappings As Object ' Scripting.Dictionary
-    Dim conceptualFieldName As String ' 我們內部定義的欄位名
-    Dim selectedSourceField As String ' 使用者選擇的來源欄位名
+    Dim ctrl As MSForms.Control
+    Dim cbo As MSForms.ComboBox
+    Dim comboBoxTag As String
+    Dim standardField As String ' ComboBox 的 Name，作為標準欄位名 (Key)
+    Dim selectedField As String ' ComboBox 選中的 Value，作為來源欄位名 (Value)
 
     On Error GoTo ErrorHandler
 
@@ -63,30 +66,28 @@ Public Function GetFieldMappings() As Object ' Returns Scripting.Dictionary
     mappings.CompareMode = vbTextCompare ' Key 不區分大小寫
     Debug.Print Me.Name & "." & METHOD_NAME & " - Dictionary created."
 
-    ' --- 處理指定的 ComboBox ---
-
-    ' 1. AccountNumber (會計科目編號) - 假設 vTBConfig 上有 cboAccountNo
-    conceptualFieldName = "AccountNumber" ' 標準內部名稱
-    If Me.cboAccountNo.ListIndex > -1 Then
-        selectedSourceField = Me.cboAccountNo.value
-        mappings.Add conceptualFieldName, selectedSourceField
-        Debug.Print "  Mapping added: """ & conceptualFieldName & """ -> """ & selectedSourceField & """"
-    Else
-        Debug.Print "  Warning: ComboBox 'cboAccountNo' (for " & conceptualFieldName & ") has no selection."
-        ' mappings.Add conceptualFieldName, "" ' 可選：加入空字串表示未選擇
-    End If
-
-    ' 2. AccountName (會計科目名稱) - 假設 vTBConfig 上有 cboAccountName
-    conceptualFieldName = "AccountName" ' 標準內部名稱
-    If Me.cboAccountName.ListIndex > -1 Then
-        selectedSourceField = Me.cboAccountName.value
-        mappings.Add conceptualFieldName, selectedSourceField
-        Debug.Print "  Mapping added: """ & conceptualFieldName & """ -> """ & selectedSourceField & """"
-    Else
-        Debug.Print "  Warning: ComboBox 'cboAccountName' (for " & conceptualFieldName & ") has no selection."
-        ' mappings.Add conceptualFieldName, "" ' 可選：加入空字串表示未選擇
-    End If
-
+    ' 遍歷表單上的所有控制項
+    For Each ctrl In Me.Controls
+        ' 檢查是否為 ComboBox
+        If TypeOf ctrl Is MSForms.ComboBox Then
+            Set cbo = ctrl
+            comboBoxTag = Trim(cbo.tag)
+            ' 如果 Tag 屬性被標記為 "header"，則處理此 ComboBox
+            If comboBoxTag = "header" Then
+                If cbo.ListIndex > -1 Then          ' 確保有項目被選中
+                    standardField = cbo.Name        ' 使用 ComboBox 的 Name 作為標準欄位名 (Key)
+                    selectedField = cbo.value       ' 使用 ComboBox 選中的值作為來源欄位名 (Value)
+                    mappings.Add standardField, selectedField
+                    Debug.Print "  Mapping added: """ & standardField & """ (from ComboBox """ & cbo.Name & """ with Tag """ & comboBoxTag & """) -> """ & selectedField & """"
+                Else
+                    ' ComboBox 被標記為 "header"，但使用者未選擇任何項目
+                    Debug.Print "  Info: ComboBox """ & cbo.Name & """ (Tag: """ & comboBoxTag & """) has no selection."
+                End If
+            End If
+            Set cbo = Nothing ' 釋放 ComboBox 物件參考
+        End If
+    Next ctrl
+    
     Debug.Print Me.Name & "." & METHOD_NAME & " - Mappings collected. Count: " & mappings.Count
     Set GetFieldMappings = mappings ' 回傳建立好的 Dictionary
     Exit Function
@@ -99,25 +100,42 @@ ErrorHandler:
     MsgBox "讀取 TB 欄位對應設定時發生錯誤：" & vbCrLf & Err.Description, vbCritical, "錯誤"
     Set GetFieldMappings = Nothing ' 發生錯誤時回傳 Nothing
     Set mappings = Nothing
+    Set cbo = Nothing
 End Function
 
-' --- 新增: 公共方法，用於從外部填入 ComboBox ---
 Public Sub PopulateComboBoxes(fieldNames As Variant)
     Const METHOD_NAME As String = "PopulateComboBoxes"
     Dim cbo As MSForms.ComboBox
     Dim ctrl As MSForms.Control
     Dim fieldName As Variant
+    Dim comboBoxTag As String ' 用於儲存 ComboBox 的 Tag 屬性
 
     On Error GoTo ErrorHandler
-
+    
+    Dim items As Variant: items = Array("年度變動金額", "期初與期末金額", "借方與貸方金額", "借貸方之期初期末金額")
+    For Each ctrl In Me.Controls
+        If TypeOf ctrl Is MSForms.ComboBox Then
+            Set cbo = ctrl
+            If cbo.Name = "cboMethod" Then
+                cbo.Clear
+                cbo.List = items
+                cbo.ListIndex = -1 ' 預設不選中
+            End If
+            Set cbo = Nothing ' 確保在循環中釋放
+        End If
+    Next ctrl
+    
     ' 檢查傳入的參數是否為有效的陣列
     If IsEmpty(fieldNames) Or Not IsArray(fieldNames) Then
-        Debug.Print Me.Name & "." & METHOD_NAME & " - 未收到有效的欄位名稱陣列，ComboBox 將不會被填入。"
-        ' 清空所有 ComboBox
+        Debug.Print Me.Name & "." & METHOD_NAME & " - 未收到有效的欄位名稱陣列。"
+        ' 清空所有 Tag 為 "header" 的 ComboBox
         For Each ctrl In Me.Controls
-            If TypeName(ctrl) = "ComboBox" Then
+            If TypeOf ctrl Is MSForms.ComboBox Then ' 確保是 ComboBox
                 Set cbo = ctrl
-                cbo.Clear
+                comboBoxTag = Trim(cbo.tag)
+                If comboBoxTag = "header" Then '
+                    cbo.Clear
+                End If
                 Set cbo = Nothing
             End If
         Next ctrl
@@ -127,22 +145,27 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
     ' 遍歷表單上的所有控制項
     For Each ctrl In Me.Controls
         ' 檢查是否為 ComboBox
-        If TypeName(ctrl) = "ComboBox" Then
+        If TypeOf ctrl Is MSForms.ComboBox Then
             Set cbo = ctrl ' 將控制項轉型為 ComboBox
-            cbo.Clear ' 清除現有項目
-            ' 將欄位名稱加入 ComboBox
-            For Each fieldName In fieldNames
-                cbo.AddItem fieldName
-            Next fieldName
-            ' 可選：設定預設不選中任何項目
-            If cbo.ListCount > 0 Then
-                cbo.ListIndex = -1
+            comboBoxTag = Trim(cbo.tag) ' 讀取並清理 Tag 屬性
+            
+            ' 只填充 Tag 為 "header" 的 ComboBox
+            If comboBoxTag = "header" Then
+                cbo.Clear
+                ' 將欄位名稱加入 ComboBox
+                For Each fieldName In fieldNames
+                    cbo.AddItem fieldName
+                Next fieldName
+                If cbo.ListCount > 0 Then
+                    cbo.ListIndex = -1
+                End If
+                Debug.Print "  Populated ComboBox: """ & cbo.Name & """ (Tag: ""header"")"
             End If
             Set cbo = Nothing
         End If
     Next ctrl
 
-    Debug.Print Me.Name & "." & METHOD_NAME & " - 已成功將 " & UBound(fieldNames) + 1 & " 個欄位填入 ComboBox。"
+    Debug.Print Me.Name & "." & METHOD_NAME & " - 已將 " & UBound(fieldNames) + 1 & " 個欄位填入 Tag 為 ""header"" 的 ComboBox。"
     Exit Sub
 
 ErrorHandler:
