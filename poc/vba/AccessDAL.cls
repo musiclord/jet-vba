@@ -23,7 +23,7 @@ End Property
 Public Property Let DatabasePath(ByVal value As String)
     If m_conn Is Nothing Then
         m_dbPath = value
-    ElseIf IsConnected() Then ' Check connection state safely
+    ElseIf IsConnected() Then
         Err.Raise vbObjectError + 513, MODULE_NAME & ".DatabasePath", "Cannot change DatabasePath while connection is open."
     Else
         m_dbPath = value
@@ -36,95 +36,95 @@ Public Function Connect() As Boolean
     Const METHOD_NAME As String = "Connect"
     Dim fso As Object ' Scripting.FileSystemObject - Late Binding
     Dim dbCreated As Boolean
-    dbCreated = False ' Flag to indicate if DB was created in this call
+    dbCreated = False ' 標記資料庫是否在此次呼叫中被建立
 
-    On Error GoTo ErrorHandler
+    On Error GoTo ErrorHandler ' 設定錯誤處理
 
-    ' --- 1. Check Database Path ---
+    ' --- 1. 檢查資料庫路徑 ---
     If m_dbPath = "" Then
-         Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "DatabasePath is not set."
+         Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "DatabasePath is not set." ' 資料庫路徑未設定
     End If
 
-    ' --- 2. Check if Database File Exists ---
-    Set fso = CreateObject("Scripting.FileSystemObject")
+    ' --- 2. 檢查資料庫檔案是否存在 ---
+    Set fso = CreateObject("Scripting.FileSystemObject") ' 建立檔案系統物件
     If Not fso.FileExists(m_dbPath) Then
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Database file not found at: " & m_dbPath & ". Attempting to create..."
-        ' --- 3. Create Database if Not Exists (using ADOX - Late Binding) ---
+        ' --- 3. 如果資料庫不存在則建立 (使用 ADOX - 後期綁定) ---
         Dim cat As Object ' ADOX.Catalog - Late Binding
         Dim createConnStr As String
 
-        On Error Resume Next ' Temporarily disable error handling for CreateObject
-        Set cat = CreateObject("ADOX.Catalog")
+        On Error Resume Next ' 暫時停用 CreateObject 的錯誤處理
+        Set cat = CreateObject("ADOX.Catalog") ' 建立 ADOX Catalog 物件
         If Err.Number <> 0 Then
             Set fso = Nothing
-            Err.Raise vbObjectError + 518, MODULE_NAME & "." & METHOD_NAME, "Failed to create ADOX.Catalog object. Ensure 'Microsoft ADO Ext. for DDL and Security' components are available or registered."
-            GoTo CleanUp ' Exit if ADOX object creation fails
+            Err.Raise vbObjectError + 518, MODULE_NAME & "." & METHOD_NAME, "Failed to create ADOX.Catalog object. Ensure 'Microsoft ADO Ext. for DDL and Security' components are available or registered." ' 建立 ADOX Catalog 物件失敗
+            GoTo CleanUp ' 若 ADOX 物件建立失敗則離開
         End If
-        On Error GoTo ErrorHandler ' Restore default error handling
+        On Error GoTo ErrorHandler ' 恢復預設錯誤處理
 
-        ' Connection string for creating the database
+        ' 用於建立資料庫的連接字串
         createConnStr = "Provider=" & DB_PROVIDER & ";" & _
                         "Data Source=" & m_dbPath & ";"
-                        ' No need for Persist Security Info for creation
+                        ' 建立時不需要 Persist Security Info
 
-        On Error Resume Next ' Handle potential errors during DB creation
-        cat.Create createConnStr
+        On Error Resume Next ' 處理資料庫建立過程中可能發生的錯誤
+        cat.Create createConnStr ' 執行建立資料庫的動作
         If Err.Number <> 0 Then
             Dim createErrorDesc As String
-            createErrorDesc = Err.Description ' Capture error description before clearing
+            createErrorDesc = Err.Description ' 擷取錯誤描述
             Set cat = Nothing
             Set fso = Nothing
-            Err.Clear ' Clear the error before raising a new one
-            Err.Raise vbObjectError + 519, MODULE_NAME & "." & METHOD_NAME, "Failed to create new database file at '" & m_dbPath & "'. Error: " & createErrorDesc
-            GoTo CleanUp ' Exit if creation fails
+            Err.Clear ' 清除錯誤後再引發新錯誤
+            Err.Raise vbObjectError + 519, MODULE_NAME & "." & METHOD_NAME, "Failed to create new database file at '" & m_dbPath & "'. Error: " & createErrorDesc ' 建立新資料庫檔案失敗
+            GoTo CleanUp ' 若建立失敗則離開
         End If
-        On Error GoTo ErrorHandler ' Restore default error handling
+        On Error GoTo ErrorHandler ' 恢復預設錯誤處理
 
-        Set cat = Nothing ' Release ADOX object
-        dbCreated = True
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Successfully created new database file: " & m_dbPath
+        Set cat = Nothing ' 釋放 ADOX 物件
+        dbCreated = True ' 標記資料庫已建立
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Successfully created new database file: " & m_dbPath ' 成功建立新資料庫檔案
     End If
-    Set fso = Nothing ' Release FileSystemObject
+    Set fso = Nothing ' 釋放 FileSystemObject
 
-    ' --- 4. Initialize and Open Connection ---
+    ' --- 4. 初始化並開啟連線 ---
     If m_conn Is Nothing Then
-        Set m_conn = CreateObject("ADODB.Connection") ' Late binding
+        Set m_conn = CreateObject("ADODB.Connection") ' 後期綁定，建立 ADODB Connection 物件
     End If
 
-    If Not IsConnected() Then
+    If Not IsConnected() Then ' 如果尚未連線
         Dim connStr As String
+        ' 設定連接字串
         connStr = "Provider=" & DB_PROVIDER & ";" & _
                   "Data Source=" & m_dbPath & ";" & _
                   "Persist Security Info=False;"
-        m_conn.ConnectionString = connStr
-        m_conn.Open
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection opened successfully to: " & m_dbPath
+        m_conn.ConnectionString = connStr ' 設定連線物件的連接字串
+        m_conn.Open ' 開啟連線
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection opened successfully to: " & m_dbPath ' 成功開啟連線
     Else
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection was already open to: " & m_dbPath
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection was already open to: " & m_dbPath ' 連線已開啟
     End If
 
-    Connect = IsConnected()
+    Connect = IsConnected() ' 設定函數回傳值為目前的連線狀態
 
-    ' Optional: Inform user if DB was just created
+    ' 可選：如果資料庫剛被建立，通知使用者
     If dbCreated Then
         ' MsgBox "已成功建立新的資料庫檔案：" & vbCrLf & m_dbPath, vbInformation, "資料庫建立"
-        ' Consider if a MsgBox is appropriate here, or just logging. Logging is less intrusive.
+        ' 考慮此處是否適合使用 MsgBox，或僅記錄日誌。記錄日誌的侵入性較小。
     End If
 
-CleanUp: ' Added CleanUp label
-    Set fso = Nothing ' Ensure FSO is released on exit/error
-    ' Set cat = Nothing ' Ensure ADOX object is released (already done above, but safe)
-    Exit Function
+CleanUp: ' 清理標籤
+    Set fso = Nothing ' 確保 FSO 在離開或錯誤時被釋放
+    ' Set cat = Nothing ' 確保 ADOX 物件被釋放 (上面已處理，但再次設定是安全的)
+    Exit Function ' 離開函數
 
-ErrorHandler:
-    Connect = False
+ErrorHandler: ' 錯誤處理程序
+    Connect = False ' 設定函數回傳值為 False (連線失敗)
     Debug.Print "--- " & MODULE_NAME & "." & METHOD_NAME & " Error ---"
     Debug.Print "Error Number: " & Err.Number
     Debug.Print "Error Source: " & Err.Source
     Debug.Print "Error Description: " & Err.Description
-    ' Raise the error to the caller
+    ' 將錯誤引發給呼叫者
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp ' Go to cleanup after raising error
+    GoTo CleanUp ' 引發錯誤後跳至清理程序
 End Function
 
 Public Sub Disconnect()
@@ -316,7 +316,7 @@ Public Sub DropTable(ByVal tableName As String)
     On Error GoTo ErrorHandler
     
     If TableExists(tableName) Then
-        sql = "DROP TABLE [" & tableName & "]"
+        sql = "DROP TABLE [" & EscapeTableNameForSQL(tableName) & "]" ' Modified to use EscapeTableNameForSQL
         ExecuteSQL sql
     End If
     Exit Sub
@@ -341,8 +341,6 @@ Public Function GetTableNames() As Variant ' Returns array of table names or Emp
     
     Set tblList = New Collection ' Use VBA's built-in Collection
     
-    ' Get user tables (excluding system and temp tables)
-    ' adSchemaTables = 20
     Set rs = m_conn.OpenSchema(20, Array(Empty, Empty, Empty, "TABLE"))
     Do While Not rs.EOF
         tblName = rs.Fields("TABLE_NAME").value ' Use Fields collection by name
@@ -379,43 +377,30 @@ ErrorHandler:
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
 End Function
 
-'-------------------------------------------------------------------------------
-' Function:  GetScalar
-' Purpose:   執行 SQL 查詢並返回結果集的第一行第一列的值。
-'            適用於查詢 COUNT(*), SUM(), AVG(), MAX(), MIN() 等單一結果。
-' Arguments: sql - 要執行的 SQL SELECT 語句。
-' Returns:   Variant - 查詢結果 (可能是數字、文字、日期或 Null)。
-'                    如果查詢未返回任何記錄，返回 Null。
-'                    如果執行過程中發生錯誤，返回 CVErr(xlErrValue)。
-' Note:      使用後期綁定 ADODB。調用前需確保已成功連接資料庫。
-'-------------------------------------------------------------------------------
 Public Function GetScalar(ByVal sql As String) As Variant
     Const METHOD_NAME As String = "GetScalar"
-    Dim rs As Object ' ADODB.Recordset - Late Binding
+    Dim rs As Object ' ADODB.Recordset - 後期綁定
     
     On Error GoTo ErrorHandler
     GetScalar = Null ' 預設返回 Null (如果查詢無結果)
     
     ' --- 1. 確保資料庫已連接 ---
-    ' 假設已存在 IsConnected 方法檢查 m_conn 狀態，或者 Connect 會處理重連
-    If Not Me.IsConnected() Then ' 假設 IsConnected 存在
-         If Not Me.Connect Then ' 嘗試連接
-             ' 如果連接失敗，觸發錯誤並由 ErrorHandler 處理
+    If Not Me.IsConnected() Then
+         If Not Me.Connect Then
              Err.Raise vbObjectError + 515, MODULE_NAME & "." & METHOD_NAME, "無法連接到資料庫。"
+             GoTo CleanUp ' 如果 Err.Raise 正常工作，則不應到達此處
          End If
     End If
     
     ' --- 2. 創建並打開 Recordset ---
     Set rs = CreateObject("ADODB.Recordset")
-    ' 使用 adOpenForwardOnly 和 adLockReadOnly 以提高效率
-    rs.Open sql, Me.m_conn, 0, 1 ' 0 = adOpenForwardOnly, 1 = adLockReadOnly
+    rs.Open sql, m_conn, 0, 1 ' adOpenForwardOnly, adLockReadOnly
     
     ' --- 3. 檢查是否有結果並獲取值 ---
-    If Not rs.EOF Then ' 檢查是否有記錄返回
-        If Not IsNull(rs.Fields(0).value) Then ' 再次檢查第一個欄位的值是否為 Null
-            GetScalar = rs.Fields(0).value ' 獲取第一行第一列的值
+    If Not rs.EOF Then
+        If Not IsNull(rs.Fields(0).value) Then
+            GetScalar = rs.Fields(0).value
         End If
-        ' 如果 rs.EOF 為 False 但第一個欄位值為 Null，函數將返回預設的 Null
     End If
     
 CleanUp: ' 清理資源
@@ -428,13 +413,84 @@ CleanUp: ' 清理資源
 
 ErrorHandler: ' 錯誤處理
     GetScalar = CVErr(xlErrValue) ' 發生錯誤時返回 Error 值
-    ' 使用 Debug.Print 記錄詳細錯誤信息
-    Debug.Print "--- " & MODULE_NAME & "." & METHOD_NAME & " Error ---"
+    Debug.Print "--- " & MODULE_NAME & "." & METHOD_NAME & " 錯誤 ---"
     Debug.Print "SQL: " & sql
-    Debug.Print "Error: " & Err.Description & " (" & Err.Number & ")"
-    ' 可選擇是否向上層 (調用者) 拋出錯誤
-    ' Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp ' 跳轉到清理步驟
+    Debug.Print "錯誤: " & Err.Description & " (" & Err.Number & ")"
+    ' 將錯誤向上拋給呼叫者
+    Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, "GetScalar 中發生錯誤: " & Err.Description
+    GoTo CleanUp ' 不應到達此處
+End Function
+
+' 獲取指定資料表的記錄數
+Public Function GetRecordCount(ByVal tableName As String) As Long
+    Const METHOD_NAME As String = "GetRecordCount"
+    Dim sql As String
+    Dim result As Variant
+
+    On Error GoTo ErrorHandler
+    GetRecordCount = -1 ' 預設為錯誤
+
+    If Trim$(tableName) = "" Then
+        Err.Raise vbObjectError + 501, MODULE_NAME & "." & METHOD_NAME, "資料表名稱不可為空。"
+        GoTo CleanUp
+    End If
+
+    ' --- 1. 確保連接 ---
+    If Not Me.IsConnected() Then
+        If Not Me.Connect() Then
+            Err.Raise vbObjectError + 502, MODULE_NAME & "." & METHOD_NAME, "無法連接到資料庫。"
+            GoTo CleanUp
+        End If
+    End If
+
+    ' --- 2. 在嘗試計數之前檢查資料表是否存在 ---
+    '    如果 GetScalar 本身不檢查，這可以防止 GetScalar 因資料表不存在而失敗。
+    If Not Me.TableExists(tableName) Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料表 '" & tableName & "' 不存在。返回 0 筆記錄。"
+        GetRecordCount = 0 ' 資料表不存在，因此記錄數為 0。
+        GoTo CleanUp
+    End If
+
+    ' --- 3. 建構 SQL 並獲取計數 ---
+    sql = "SELECT COUNT(*) FROM [" & EscapeTableNameForSQL(tableName) & "]" ' EscapeTableNameForSQL is correctly called here
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - SQL: " & sql
+    
+    result = Me.GetScalar(sql)
+
+    If IsError(result) Then ' 檢查 GetScalar 是否返回錯誤值
+        ' GetScalar 已記錄錯誤，重新引發並附加上下文
+        Err.Raise vbObjectError + 503, MODULE_NAME & "." & METHOD_NAME, "GetScalar 在計算資料表 '" & tableName & "' 的記錄數時失敗。"
+    ElseIf IsNull(result) Then
+        ' 對於現有資料表的 COUNT(*)，理想情況下不應發生此情況，
+        ' 但如果發生，則視為 0 或錯誤。
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - GetScalar 為 COUNT(*) 返回 Null，假設資料表 '" & tableName & "' 的記錄數為 0。"
+        GetRecordCount = 0
+    Else
+        GetRecordCount = CLng(result)
+    End If
+
+CleanUp: ' 清理標籤
+    Exit Function
+
+ErrorHandler: ' 錯誤處理程序
+    GetRecordCount = -1 ' 確保返回錯誤
+    Debug.Print "--- " & MODULE_NAME & "." & METHOD_NAME & " 錯誤 ---"
+    Debug.Print "資料表: " & tableName
+    Debug.Print "錯誤: " & Err.Description & " (" & Err.Number & ")"
+    ' 將錯誤向上拋給呼叫者
+    Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, "GetRecordCount 中發生錯誤: " & Err.Description
+    GoTo CleanUp ' 不應到達此處
+End Function
+
+Private Function EscapeTableNameForSQL(ByVal rawName As String) As String
+    ' Escapes a raw table name for safe inclusion INSIDE SQL brackets [ ].
+    ' The main character to escape for content within brackets is the closing bracket itself.
+    If rawName = "" Then
+        EscapeTableNameForSQL = ""
+    Else
+        ' Replace any closing square bracket ] with a double closing square bracket ]]
+        EscapeTableNameForSQL = Replace(rawName, "]", "]]")
+    End If
 End Function
 
 Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Returns array or Empty
@@ -451,9 +507,7 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
     Debug.Print "Parameter tableName: """ & tableName & """"
 
     If Not Me.IsConnected Then
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Not connected. Attempting to connect..."
         If Not Me.Connect Then
-            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: Cannot connect to database."
             GetTableFieldNames = Empty
             GoTo CleanUp
         Else
@@ -474,11 +528,9 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
         GetTableFieldNames = Empty
     Else
         Set fieldNamesList = New Collection ' Use VBA's built-in Collection
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Reading column names from schema:"
         Do While Not rsSchema.EOF
             fieldName = rsSchema.Fields("COLUMN_NAME").value
             fieldNamesList.Add fieldName ' Add to collection
-            Debug.Print "    Column: " & fieldName
             rsSchema.MoveNext
         Loop
 

@@ -16,3 +16,7 @@ Public Sub AddLineItem()
     ' 對資料表 GL 新增欄位 [LineItem(傳票文件項次)]
     ' 用作資料增強，將欄位映射後的資料表 GL 對 [DocumentNumber] 分組後設置遞增的數字
 End Sub
+
+
+
+

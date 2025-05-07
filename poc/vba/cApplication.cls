@@ -23,9 +23,6 @@ Private Const MAX_ROWS_TO_SHOW As Long = 1000
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
-Attribute vMain.VB_VarHelpID = -1
-Private GLEntity As GLEntity
-Private TBEntity As TBEntity
 Private GLService As GLService
 Private TBService As TBService
 Private ImportService As ImportService
@@ -35,10 +32,10 @@ Private ValidationService As ValidationService
 ' --- Step 1 ---
 Private WithEvents vProject As vProject
 Attribute vProject.VB_VarHelpID = -1
-Private WithEvents vTBConfig As vTBConfig
-Attribute vTBConfig.VB_VarHelpID = -1
-Private WithEvents vGLConfig As vGLConfig
-Attribute vGLConfig.VB_VarHelpID = -1
+Private WithEvents vConfigTB As vConfigTB
+Attribute vConfigTB.VB_VarHelpID = -1
+Private WithEvents vConfigGL As vConfigGL
+Attribute vConfigGL.VB_VarHelpID = -1
 ' --- Step 2 ---
 Private WithEvents vValidation As vValidation
 Attribute vValidation.VB_VarHelpID = -1
@@ -52,9 +49,7 @@ Private Sub Class_Initialize()
     Set PreviewService = New PreviewService
     Set MappingService = New MappingService
     Set ValidationService = New ValidationService
-    Set GLEntity = New GLEntity
     Set GLService = New GLService
-    Set TBEntity = New TBEntity
     Set TBService = New TBService
     Set vMain = New vMain
 End Sub
@@ -69,8 +64,8 @@ End Sub
 
 Private Sub vMain_DoStep1()
     Set vProject = New vProject
-    Set vTBConfig = New vTBConfig
-    Set vGLConfig = New vGLConfig
+    Set vConfigTB = New vConfigTB
+    Set vConfigGL = New vConfigGL
     
     Call vProject.Show(vbModeless)
 End Sub
@@ -98,54 +93,54 @@ Private Sub vProject_DoExit()
 End Sub
 
 Private Sub vProject_DoConfirm()
-    Call PopulateFormComboBoxes(vTBConfig, "TB") ' 將 TB 欄位注入至 vTBConfig
+    Call PopulateFormComboBoxes(vConfigTB, "TB") ' 將 TB 欄位注入至 vConfigTB
     ' 移至下個視窗
     Call vProject.Hide
-    Call vTBConfig.Show(vbModeless)
+    Call vConfigTB.Show(vbModeless)
     vMain.lblProject.BackColor = vbYellow
 End Sub
 
-' ====== vTBConfig ======
-Private Sub vTBConfig_DoExit()
-    Unload vTBConfig
-    Set vTBConfig = Nothing
+' ====== vConfigTB ======
+Private Sub vConfigTB_DoExit()
+    Unload vConfigTB
+    Set vConfigTB = Nothing
 End Sub
 
-Private Sub vTBConfig_DoImport()
+Private Sub vConfigTB_DoImport()
     Call ImportCSV("TB")
 End Sub
 
-Private Sub vTBConfig_DoPreview()
+Private Sub vConfigTB_DoPreview()
     Call PreviewTable("TB") ' 在工作表預覽資料表 TB
 End Sub
 
-Private Sub vTBConfig_DoConfirm()
-    Call ProcessAndStoreFormMappings(vTBConfig, "TB") ' 處理並儲存 TB 欄位配對
-    Call PopulateFormComboBoxes(vGLConfig, "GL") ' 將 GL 欄位注入至 vGLConfig
+Private Sub vConfigTB_DoConfirm()
+    Call ProcessAndStoreFormMappings(vConfigTB, "TB") ' 處理並儲存 TB 欄位配對
+    Call PopulateFormComboBoxes(vConfigGL, "GL") ' 將 GL 欄位注入至 vConfigGL
     ' 移至下個視窗
-    Call vTBConfig.Hide
-    Call vGLConfig.Show(vbModeless)
+    Call vConfigTB.Hide
+    Call vConfigGL.Show(vbModeless)
     vMain.lblImportTB.BackColor = vbYellow
 End Sub
 
-' ====== vGLConfig ======
-Private Sub vGLConfig_DoExit()
-    Unload vGLConfig
-    Set vGLConfig = Nothing
+' ====== vConfigGL ======
+Private Sub vConfigGL_DoExit()
+    Unload vConfigGL
+    Set vConfigGL = Nothing
 End Sub
 
-Private Sub vGLConfig_DoImport()
+Private Sub vConfigGL_DoImport()
     Call ImportCSV("GL")
 End Sub
 
-Private Sub vGLConfig_DoPreview()
+Private Sub vConfigGL_DoPreview()
     Call PreviewTable("GL") ' 在工作表預覽資料表 GL
 End Sub
 
-Private Sub vGLConfig_DoConfirm()
-    Call ProcessAndStoreFormMappings(vGLConfig, "GL") ' 處理並儲存 GL 欄位配對
+Private Sub vConfigGL_DoConfirm()
+    Call ProcessAndStoreFormMappings(vConfigGL, "GL") ' 處理並儲存 GL 欄位配對
     ' 移至下個視窗
-    Call vGLConfig.Hide
+    Call vConfigGL.Hide
     vMain.lblImportGL.BackColor = vbYellow
 End Sub
 
@@ -156,8 +151,61 @@ Private Sub vValidation_DoExit()
 End Sub
 
 Private Sub vValidation_TestCompleteness()
-    Call ValidationService.TestCompleteness
-    vMain.lblCompletenessTest.BackColor = vbYellow
+    Const METHOD_NAME As String = "vValidation_TestCompleteness" ' 建議為每個方法添加常數
+    Dim startDate As Date, endDate As Date
+    Dim testResult As Boolean
+    Dim dal As AccessDAL ' 用於初始化的 DAL 實例
+
+    On Error GoTo ErrorHandler
+
+    ' --- 1. 設定測試期間 ---
+    startDate = #1/1/2023#
+    endDate = #12/31/2023#
+
+    ' 2a. 建立或獲取 DAL 實例
+    Set dal = New AccessDAL ' 或者，如果 cApplication 管理一個共享的 DAL 實例，則使用該實例
+    dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME ' DATABASE_NAME 是 cApplication 中的常數
+    If Not dal.Connect Then
+        MsgBox "驗證完整性測試時連接資料庫失敗。", vbCritical, MODULE_NAME & "." & METHOD_NAME
+        GoTo CleanUp
+    End If
+    
+    Dim actualGLTableName As String: actualGLTableName = "GL"
+    Dim actualTBTableName As String: actualTBTableName = "TB"
+    
+    ' 2c. 初始化 ValidationService
+    ' 確保 MappingService 物件 (由 cApplication 管理) 已經透過表單互動設定了正確的欄位映射
+    If ValidationService Is Nothing Then Set ValidationService = New ValidationService ' 確保實例存在
+    Call ValidationService.Initialize(dal, MappingService, actualGLTableName, actualTBTableName)
+    ' MappingService 應該在之前的步驟 (例如 vConfigTB_DoConfirm, vConfigGL_DoConfirm) 中
+    ' 透過 ProcessAndStoreFormMappings 方法填充了欄位映射。
+
+    ' --- 3. 執行完整性測試 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 ValidationService.TestCompleteness，期間: " & Format(startDate, "yyyy-mm-dd") & " 到 " & Format(endDate, "yyyy-mm-dd")
+    testResult = ValidationService.TestCompleteness(startDate, endDate) ' 不再傳遞 glMapping 和 tbMapping
+
+    ' --- 4. 向使用者提供回饋 ---
+    If testResult Then
+        MsgBox "完整性測試完成：未發現差異。", vbInformation, "測試結果"
+        If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbGreen ' 表示成功
+    Else
+        ' 使用 ValidationService 中 Public 的 COMPLETE_DIFF 常數
+        MsgBox "完整性測試完成：發現差異。" & vbCrLf & _
+               "請檢查 Access 資料庫中的 '" & ValidationService.COMPLETE_DIFF & "' 資料表以獲取詳細資訊。", vbExclamation, "測試結果"
+        If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbRed ' 表示發現差異
+    End If
+    GoTo CleanUp
+
+ErrorHandler: ' 錯誤處理程序
+    MsgBox "執行完整性測試時發生錯誤：" & vbCrLf & _
+           "來源: " & Err.Source & vbCrLf & _
+           "描述: " & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
+    If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = RGB(255, 165, 0) ' 錯誤時顯示橘色
+CleanUp: ' 清理標籤
+    If Not dal Is Nothing Then
+        dal.Disconnect
+        Set dal = Nothing
+    End If
 End Sub
 
 Private Sub vValidation_TestDocumentBalance()
@@ -228,7 +276,6 @@ Private Sub ImportCSV(ByVal importType As String)
     On Error GoTo ErrorHandler
     
     ' 3a. 偵測編碼
-    ' 注意: DetectCSVEncoding 位於 mod_Utility.bas
     On Error Resume Next
     csvEncoding = mod_Utility.DetectCSVEncoding(csvFilePath)
     If Err.Number <> 0 Then
@@ -236,7 +283,7 @@ Private Sub ImportCSV(ByVal importType As String)
         csvEncoding = DEFAULT_ENCODING
         Err.Clear
     End If
-    On Error GoTo ErrorHandler ' 恢復正常錯誤處理
+    On Error GoTo ErrorHandler
     Debug.Print importType & " CSV 編碼偵測結果: " & csvEncoding
 
     ' 3b. 匯入至 Access (調用 ImportService)
