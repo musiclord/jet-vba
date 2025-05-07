@@ -100,7 +100,7 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 嘗試刪除資料表: " & diffTableName
     m_AccessDAL.DropTable diffTableName ' DropTable 應能處理資料表不存在的情況而不會引發錯誤
 
-    ' --- 3. 建構並執行 SQL 查詢 (改用 IIF(IsNull(...),0,...) 取代 Nz) ---
+    ' --- 3. 建構並執行 SQL 查詢 ---
     Dim sql2 As String
     sql2 = _
       "SELECT " & _
@@ -121,10 +121,12 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
       "    FROM [" & m_GLTable & "] " & _
       "    WHERE [" & EscapeSQLField(glPostDate) & "] BETWEEN #" & Format(startDate, "yyyy\-MM\-dd") & "# AND #" & Format(endDate, "yyyy\-MM\-dd") & "# " & _
       "    GROUP BY [" & EscapeSQLField(glAccountNumber) & "] " & _
-      ") AS GL ON TB.[" & EscapeSQLField(tbAccountNumber) & "] = GL.AccountKey"
+      ") AS GL " & _
+      "  ON Left(GL.AccountKey, Len(TB.[" & EscapeSQLField(tbAccountNumber) & "])) = TB.[" & EscapeSQLField(tbAccountNumber) & "]"
 
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 執行 SQL: " & sql2
     recordsAffected = m_AccessDAL.ExecuteSQL(sql2)
+    
     ' --- 4. 透過計算新資料表中的記錄數來檢查是否找到差異 ---
     diff = m_AccessDAL.GetRecordCount(diffTableName)
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - " & diffTableName & " 中的記錄數: " & diff

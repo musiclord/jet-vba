@@ -23,6 +23,7 @@ Private Const MAX_ROWS_TO_SHOW As Long = 1000
 
 ' --- º“≤’≈‹º∆ ---
 Private WithEvents vMain As vMain
+Attribute vMain.VB_VarHelpID = -1
 Private GLService As GLService
 Private TBService As TBService
 Private ImportService As ImportService
