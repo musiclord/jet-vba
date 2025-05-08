@@ -23,7 +23,6 @@ Private Const MAX_ROWS_TO_SHOW As Long = 1000
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
-Attribute vMain.VB_VarHelpID = -1
 Private GLService As GLService
 Private TBService As TBService
 Private ImportService As ImportService
@@ -57,9 +56,6 @@ End Sub
 
 ' ====== vMain ======
 Private Sub vMain_DoExit()
-    ' -> Save AppConfig <-
-    ' Unload vMain
-    ' Set vMain = Nothing
     vMain.Hide
 End Sub
 
@@ -72,12 +68,10 @@ Private Sub vMain_DoStep1()
 End Sub
 
 Private Sub vMain_DoStep2()
-    ' -> vValidation
     Set vValidation = New vValidation
 End Sub
 
 Private Sub vMain_DoStep3()
-    ' -> vCriteria
     Set vCriteria = New vCriteria
     Call PopulateFormComboBoxes(vCriteria, "GL")
     Call vCriteria.Show(vbModeless)
@@ -109,6 +103,7 @@ End Sub
 
 Private Sub vConfigTB_DoImport()
     Call ImportCSV("TB")
+    Call PopulateFormComboBoxes(vConfigTB, "TB")
 End Sub
 
 Private Sub vConfigTB_DoPreview()
@@ -132,6 +127,7 @@ End Sub
 
 Private Sub vConfigGL_DoImport()
     Call ImportCSV("GL")
+    Call PopulateFormComboBoxes(vConfigGL, "GL")
 End Sub
 
 Private Sub vConfigGL_DoPreview()
@@ -152,43 +148,34 @@ Private Sub vValidation_DoExit()
 End Sub
 
 Private Sub vValidation_TestCompleteness()
-    Const METHOD_NAME As String = "vValidation_TestCompleteness" ' 建議為每個方法添加常數
+    Const METHOD_NAME As String = "vValidation_TestCompleteness"
     Dim startDate As Date, endDate As Date
     Dim testResult As Boolean
-    Dim dal As AccessDAL ' 用於初始化的 DAL 實例
-
+    Dim dal As AccessDAL
+    Dim actualGLTableName As String
+    Dim actualTBTableName As String
+    
     On Error GoTo ErrorHandler
 
-    ' --- 1. 設定測試期間 ---
+    ' --- 1. 設定資料 ---
     startDate = #1/1/2023#
     endDate = #12/31/2023#
-
-    ' 2a. 建立或獲取 DAL 實例
-    Set dal = New AccessDAL ' 或者，如果 cApplication 管理一個共享的 DAL 實例，則使用該實例
+    actualGLTableName = "GL"
+    actualTBTableName = "TB"
+    
+    ' --- 2. 建立實例 ---
+    Set dal = New AccessDAL
     dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME ' DATABASE_NAME 是 cApplication 中的常數
-    If Not dal.Connect Then
-        MsgBox "驗證完整性測試時連接資料庫失敗。", vbCritical, MODULE_NAME & "." & METHOD_NAME
-        GoTo CleanUp
-    End If
-    
-    Dim actualGLTableName As String: actualGLTableName = "GL"
-    Dim actualTBTableName As String: actualTBTableName = "TB"
-    
-    ' 2c. 初始化 ValidationService
-    ' 確保 MappingService 物件 (由 cApplication 管理) 已經透過表單互動設定了正確的欄位映射
-    If ValidationService Is Nothing Then Set ValidationService = New ValidationService ' 確保實例存在
     Call ValidationService.Initialize(dal, MappingService, actualGLTableName, actualTBTableName)
-    ' MappingService 應該在之前的步驟 (例如 vConfigTB_DoConfirm, vConfigGL_DoConfirm) 中
-    ' 透過 ProcessAndStoreFormMappings 方法填充了欄位映射。
 
     ' --- 3. 執行完整性測試 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 ValidationService.TestCompleteness，期間: " & Format(startDate, "yyyy-mm-dd") & " 到 " & Format(endDate, "yyyy-mm-dd")
-    testResult = ValidationService.TestCompleteness(startDate, endDate) ' 不再傳遞 glMapping 和 tbMapping
+    testResult = ValidationService.TestCompleteness(startDate, endDate)
 
     ' --- 4. 向使用者提供回饋 ---
     If testResult Then
         MsgBox "完整性測試完成：未發現差異。", vbInformation, "測試結果"
-        If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbGreen ' 表示成功
+        If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbYellow ' 表示成功
     Else
         ' 使用 ValidationService 中 Public 的 COMPLETE_DIFF 常數
         MsgBox "完整性測試完成：發現差異。" & vbCrLf & _
@@ -202,11 +189,9 @@ ErrorHandler: ' 錯誤處理程序
            "來源: " & Err.Source & vbCrLf & _
            "描述: " & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
     If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = RGB(255, 165, 0) ' 錯誤時顯示橘色
-CleanUp: ' 清理標籤
-    If Not dal Is Nothing Then
-        dal.Disconnect
-        Set dal = Nothing
-    End If
+CleanUp:
+    dal.Disconnect
+    Set dal = Nothing
 End Sub
 
 Private Sub vValidation_TestDocumentBalance()
@@ -380,16 +365,22 @@ Private Sub PopulateFormComboBoxes(ByVal targetForm As Object, ByVal tableName A
     End If
 
     ' --- 1. 取得指定資料表的欄位名稱 ---
-    dbPath = ThisWorkbook.Path & "\" & DATABASE_NAME ' 取得資料庫路徑
-    If Dir(dbPath) = "" Then
-        MsgBox "找不到資料庫檔案：" & vbCrLf & dbPath, vbCritical, MODULE_NAME & "." & METHOD_NAME
-        fieldNames = Empty ' 設定為 Empty
+    dbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    
+    ' 不再檢查檔案是否存在，而是讓 AccessDAL.Connect() 處理
+    Set dal = New AccessDAL
+    dal.DatabasePath = dbPath
+    
+    ' 連接資料庫 (不存在時會自動建立)
+    If Not dal.Connect() Then
+        MsgBox "無法連接或建立資料庫：" & vbCrLf & dbPath, vbCritical, MODULE_NAME & "." & METHOD_NAME
+        fieldNames = Empty
     Else
-        Set dal = New AccessDAL ' 建立 DAL 實例
-        dal.DatabasePath = dbPath ' 設定路徑
-        fieldNames = dal.GetTableFieldNames(tableName) ' 呼叫函數
-        Set dal = Nothing ' 立即釋放 DAL 物件
+        ' 資料庫連接成功後，再獲取欄位名稱
+        fieldNames = dal.GetTableFieldNames(tableName)
     End If
+    
+    Set dal = Nothing  ' 釋放 DAL 物件
 
     ' --- 2. 將欄位名稱注入目標表單 ---
     ' targetForm 有一個名為 PopulateComboBoxes 的 Public Sub

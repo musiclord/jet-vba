@@ -61,13 +61,12 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
         Case 950 ' Big5 (Traditional Chinese)
             adoStream.Charset = "big5" ' Or use "windows-950"
             Debug.Print "ADODB.Stream: Setting Charset to big5"
-        Case 1200 ' UTF-16 LE (Unicode)
-            adoStream.Charset = "unicode"
-            Debug.Print "ADODB.Stream: Setting Charset to unicode"
         Case Else ' Assume system default ANSI if unknown, though passing specific code is better
             adoStream.Charset = "ascii" ' Fallback, might be incorrect
             Debug.Print "ADODB.Stream: Warning - Unknown encoding " & csvEncoding & ", falling back to ascii."
     End Select
+    adoStream.Charset = "utf-8"
+    Debug.Print "ADODB.Stream: Setting Charset to utf-8"
     adoStream.LineSeparator = adCRLF ' Common line ending, adjust if needed (adCR, adLF)
 
     ' --- 4. 開啟並讀取 CSV 檔案 ---

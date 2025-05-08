@@ -583,5 +583,3 @@ Private Sub Class_Terminate()
     Disconnect ' Ensure connection is closed when object is destroyed
 End Sub
 
-
-

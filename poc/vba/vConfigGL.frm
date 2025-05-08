@@ -40,9 +40,6 @@ Private Sub btnPreview_Click()
     RaiseEvent DoPreview
 End Sub
 
-Private Sub cboDescription_Change()
-
-End Sub
 
 Private Sub UserForm_Initialize()
     Debug.Print Me.Name & " Initialized."

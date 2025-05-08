@@ -38,14 +38,7 @@ Private Sub btnPreview_Click()
     RaiseEvent DoPreview
 End Sub
 
-
-Private Sub cboAccountName_Change()
-
-End Sub
-
-' --- 初始化事件 (清空或移除欄位載入邏輯) ---
 Private Sub UserForm_Initialize()
-    ' 確保此處不執行欄位載入
     Debug.Print Me.Name & " Initialized."
 End Sub
 
