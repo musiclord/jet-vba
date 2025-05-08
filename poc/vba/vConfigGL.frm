@@ -164,7 +164,7 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
             ElseIf cbo.Name = "cboAmount" Then
                 cbo.value = "分錄金額"
             ElseIf cbo.Name = "cboPostDate" Then
-                cbo.value = "立帳日期"
+                cbo.value = "製單日期"
             ElseIf cbo.Name = "cboCredit" Then
                 cbo.value = "貸方金額"
             ElseIf cbo.Name = "cboDebit" Then

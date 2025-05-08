@@ -48,15 +48,17 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
     Dim glAccountNumber As String, glPostDate As String, glDebit As String, glCredit As String
     Dim tbAccountNumber As String, tbOpening As String, tbClosing As String, tbAccountName As String
     
-    Dim sql As String
     Dim diff As Long ' 用於儲存差異資料表的記錄數
     Dim recordsAffected As Long ' 用於檢查 ExecuteSQL 的結果
     Dim diffTableName As String
-
-    On Error GoTo ErrorHandler
-    TestCompleteness = False ' 預設為失敗或找到差異
-    diff = -1 ' 預設為錯誤或未執行的狀態
     diffTableName = Me.COMPLETE_DIFF
+    
+    On Error GoTo ErrorHandler
+    TestCompleteness = False ' 預設失敗或找到差異
+    diff = -1 ' 預設錯誤或未執行
+    
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " : 嘗試刪除資料表: " & diffTableName
+    m_AccessDAL.DropTable diffTableName
 
     ' --- 1. 獲取欄位映射 ---
     Set glMappings = m_MappingService.GetGLFieldMappings()
@@ -73,49 +75,16 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
     tbAccountName = tbMappings("AccountName")
     Debug.Print MODULE_NAME & "." & METHOD_NAME & "-->TB 映射: 科目=[" & tbAccountNumber & "], 期初=[" & tbOpening & "], 期末=[" & tbClosing & "]"
 
-    ' --- 2. 準備資料庫：刪除已存在的差異資料表 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " : 嘗試刪除資料表: " & diffTableName
-    m_AccessDAL.DropTable diffTableName
-
-    Dim glSumSql      As String
-    Dim selectClause  As String
-    Dim intoClause    As String
-    Dim fromClause    As String
-    Dim sql          As String
-    Dim sStart        As String, sEnd As String
-    
+    ' --- 2. 準備資料 ---
+    Dim sStart As String
     sStart = Format(startDate, "yyyy\-MM\-dd")
+    Dim sEnd As String
     sEnd = Format(endDate, "yyyy\-MM\-dd")
     
-    ' 1. GL 子查詢
-    glSumSql = _
-      "SELECT Left(GLD.[" & EscapeSQLField(glAccountNumber) & "], Len(TB.[" & EscapeSQLField(tbAccountNumber) & "])) AS TbKey, " & _
-      "       SUM(IIF(GLD.[" & EscapeSQLField(glDebit) & "] IS NULL,0,GLD.[" & EscapeSQLField(glDebit) & "]) " & _
-      "           -IIF(GLD.[" & EscapeSQLField(glCredit) & "] IS NULL,0,GLD.[" & EscapeSQLField(glCredit) & "]) ) AS GL_Sum " & _
-      "FROM [" & m_GLTable & "] AS GLD " & _
-      "WHERE GLD.[" & EscapeSQLField(glPostDate) & "] BETWEEN #" & sStart & "# AND #" & sEnd & "# " & _
-      "GROUP BY Left(GLD.[" & EscapeSQLField(glAccountNumber) & "], Len(TB.[" & EscapeSQLField(tbAccountNumber) & "]))"
-    
-    ' 2. 主查詢拆分為三段，減少每段的接續符號數量
-    selectClause = _
-      "SELECT TB.[" & EscapeSQLField(tbAccountNumber) & "] AS ACCOUNT_NUM_ALL, " & _
-      "       TB.[" & EscapeSQLField(tbAccountName) & "] AS 會計科目名稱_TB, " & _
-      "       IIF(TB.[" & EscapeSQLField(tbClosing) & "] IS NULL,0,TB.[" & EscapeSQLField(tbClosing) & "]) -" & _
-      " IIF(TB.[" & EscapeSQLField(tbOpening) & "] IS NULL,0,TB.[" & EscapeSQLField(tbOpening) & "]) AS Period_Change_TB, " & _
-      "       IIF(GL.GL_Sum IS NULL,0,GL.GL_Sum) AS Net_Amount_GL, " & _
-      "       (IIF(TB.[" & EscapeSQLField(tbClosing) & "] IS NULL,0,TB.[" & EscapeSQLField(tbClosing) & "]) -" & _
-      " IIF(TB.[" & EscapeSQLField(tbOpening) & "] IS NULL,0,TB.[" & EscapeSQLField(tbOpening) & "]) ) -" & _
-      " IIF(GL.GL_Sum IS NULL,0,GL.GL_Sum) AS DIFF"
-    
-    intoClause = " INTO [" & diffTableName & "] "
-    
-    fromClause = _
-      "FROM [" & m_TBTable & "] AS TB " & _
-      "LEFT JOIN (" & glSumSql & ") AS GL " & _
-      "  ON GL.TbKey = TB.[" & EscapeSQLField(tbAccountNumber) & "]"
-    
-    ' 3. 合併三段，執行
-    sql = selectClause & intoClause & fromClause
+    ' --- 3. SQL查詢 ---
+    Dim sql As String
+    sql = "SELECT * INTO [" & diffTableName & "] FROM [" & m_GLTable & "] AS GLD " & _
+          "WHERE NOT (GLD.[" & glPostDate & "] BETWEEN #" & sStart & "# AND #" & sEnd & "#)"
     
     Debug.Print MODULE_NAME & ".TestCompleteness - 執行 SQL: " & vbCrLf & sql
     recordsAffected = m_AccessDAL.ExecuteSQL(sql)
