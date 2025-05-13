@@ -21,14 +21,20 @@ Private Const MODULE_NAME As String = "cApplication"
 Private Const DATABASE_NAME As String = "default.accdb"
 Private Const MAX_ROWS_TO_SHOW As Long = 1000
 
+' --- 成員變數 ---
+Private m_startDate As String
+Private m_endDate As String
+
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
+Attribute vMain.VB_VarHelpID = -1
 Private GLService As GLService
 Private TBService As TBService
 Private ImportService As ImportService
 Private PreviewService As PreviewService
 Private MappingService As MappingService
 Private ValidationService As ValidationService
+
 ' --- Step 1 ---
 Private WithEvents vProject As vProject
 Attribute vProject.VB_VarHelpID = -1
@@ -36,12 +42,15 @@ Private WithEvents vConfigTB As vConfigTB
 Attribute vConfigTB.VB_VarHelpID = -1
 Private WithEvents vConfigGL As vConfigGL
 Attribute vConfigGL.VB_VarHelpID = -1
+
 ' --- Step 2 ---
 Private WithEvents vValidation As vValidation
 Attribute vValidation.VB_VarHelpID = -1
+
 ' --- Step 3 ---
 Private WithEvents vCriteria As vCriteria
 Attribute vCriteria.VB_VarHelpID = -1
+
 ' --- Step 4 ---
 
 Private Sub Class_Initialize()
@@ -88,6 +97,9 @@ Private Sub vProject_DoExit()
 End Sub
 
 Private Sub vProject_DoConfirm()
+    ' 設定專案資訊
+    m_startDate = "#" & vProject.txtbPeriodStart.value & "#"
+    m_endDate = "#" & vProject.txtbPeriodEnd.value & "#"
     Call PopulateFormComboBoxes(vConfigTB, "TB") ' 將 TB 欄位注入至 vConfigTB
     ' 移至下個視窗
     Call vProject.Hide
@@ -158,8 +170,10 @@ Private Sub vValidation_TestCompleteness()
     On Error GoTo ErrorHandler
 
     ' --- 1. 設定資料 ---
-    startDate = #1/1/2023#
-    endDate = #12/31/2023#
+    startDate = m_startDate
+    endDate = m_endDate
+    'startDate = #1/1/2023#
+    'endDate = #12/31/2023#
     actualGLTableName = "GL"
     actualTBTableName = "TB"
     

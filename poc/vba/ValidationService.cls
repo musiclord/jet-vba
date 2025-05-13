@@ -84,7 +84,7 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
     ' --- 3. SQL¬d¸ß ---
     Dim sql As String
     sql = "SELECT * INTO [" & diffTableName & "] FROM [" & m_GLTable & "] AS GLD " & _
-          "WHERE NOT (GLD.[" & glPostDate & "] BETWEEN #" & sStart & "# AND #" & sEnd & "#)"
+          "WHERE (NOT (GLD.[" & glPostDate & "] BETWEEN #" & sStart & "# AND #" & sEnd & "#) OR GLD.[" & glPostDate & "] IS NULL)"
     
     Debug.Print MODULE_NAME & ".TestCompleteness - °õ¦æ SQL: " & vbCrLf & sql
     recordsAffected = m_AccessDAL.ExecuteSQL(sql)

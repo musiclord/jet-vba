@@ -1,9 +1,9 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vConfigGL 
    Caption         =   "GL Configuration"
-   ClientHeight    =   8415.001
+   ClientHeight    =   8412.001
    ClientLeft      =   120
-   ClientTop       =   465
+   ClientTop       =   468
    ClientWidth     =   11760
    OleObjectBlob   =   "vConfigGL.frx":0000
    StartUpPosition =   1  '所屬視窗中央
@@ -160,9 +160,9 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
         If TypeOf ctrl Is MSForms.ComboBox Then
             Set cbo = ctrl
             If cbo.Name = "cboAccountNo" Then
-                cbo.value = "會計科目編號"
+                cbo.value = "會計項目"
             ElseIf cbo.Name = "cboAmount" Then
-                cbo.value = "分錄金額"
+                cbo.value = "借-貸"
             ElseIf cbo.Name = "cboPostDate" Then
                 cbo.value = "製單日期"
             ElseIf cbo.Name = "cboCredit" Then
