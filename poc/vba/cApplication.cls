@@ -161,7 +161,7 @@ End Sub
 
 Private Sub vValidation_TestCompleteness()
     Const METHOD_NAME As String = "vValidation_TestCompleteness"
-    Dim startDate As Date, endDate As Date
+    Dim dtStartDate As Date, dtEndDate As Date ' 更改變數名稱以提高清晰度
     Dim testResult As Boolean
     Dim dal As AccessDAL
     Dim actualGLTableName As String
@@ -170,21 +170,35 @@ Private Sub vValidation_TestCompleteness()
     On Error GoTo ErrorHandler
 
     ' --- 1. 設定資料 ---
-    startDate = m_startDate
-    endDate = m_endDate
-    'startDate = #1/1/2023#
-    'endDate = #12/31/2023#
+    ' 驗證 m_startDate 和 m_endDate (格式為 "#date#") 並轉換
+    If Not IsDate(m_startDate) Then
+        Err.Raise vbObjectError + 550, MODULE_NAME & "." & METHOD_NAME, "無效的開始日期格式: " & m_startDate
+    End If
+    dtStartDate = CDate(m_startDate)
+
+    If Not IsDate(m_endDate) Then
+        Err.Raise vbObjectError + 551, MODULE_NAME & "." & METHOD_NAME, "無效的結束日期格式: " & m_endDate
+    End If
+    dtEndDate = CDate(m_endDate)
+    
     actualGLTableName = "GL"
     actualTBTableName = "TB"
     
     ' --- 2. 建立實例 ---
     Set dal = New AccessDAL
-    dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME ' DATABASE_NAME 是 cApplication 中的常數
+    dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    
+    ' 初始化 ValidationService (假設 ValidationService 已是有效物件)
+    ' 為防禦性起見，如果 ValidationService 為 Nothing，則重新初始化
+    If ValidationService Is Nothing Then
+        Set ValidationService = New ValidationService
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 警告: ValidationService 為 Nothing，已重新初始化。"
+    End If
     Call ValidationService.Initialize(dal, MappingService, actualGLTableName, actualTBTableName)
 
     ' --- 3. 執行完整性測試 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 ValidationService.TestCompleteness，期間: " & Format(startDate, "yyyy-mm-dd") & " 到 " & Format(endDate, "yyyy-mm-dd")
-    testResult = ValidationService.TestCompleteness(startDate, endDate)
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 ValidationService.TestCompleteness，期間: " & Format(dtStartDate, "yyyy-mm-dd") & " 到 " & Format(dtEndDate, "yyyy-mm-dd")
+    testResult = ValidationService.TestCompleteness(dtStartDate, dtEndDate)
 
     ' --- 4. 向使用者提供回饋 ---
     If testResult Then
@@ -204,7 +218,9 @@ ErrorHandler: ' 錯誤處理程序
            "描述: " & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
     If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = RGB(255, 165, 0) ' 錯誤時顯示橘色
 CleanUp:
-    dal.Disconnect
+    If Not dal Is Nothing Then ' 檢查 dal 物件是否已建立
+        dal.Disconnect
+    End If
     Set dal = Nothing
 End Sub
 

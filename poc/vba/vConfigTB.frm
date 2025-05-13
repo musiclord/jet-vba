@@ -147,15 +147,15 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
         If TypeOf ctrl Is MSForms.ComboBox Then
             Set cbo = ctrl
             If cbo.Name = "cboAccountName" Then
-                cbo.value = "會計科目名稱"
+                cbo.value = "項目名稱"
             ElseIf cbo.Name = "cboAccountNo" Then
-                cbo.value = "會計科目編號"
-            ElseIf cbo.Name = "cboChange" Then
-                cbo.value = "變動金額"
-            ElseIf cbo.Name = "cboOpening" Then
-                cbo.value = "期初金額"
-            ElseIf cbo.Name = "cboClosing" Then
-                cbo.value = "期末金額"
+                cbo.value = "會計項目"
+            ElseIf cbo.Name = "cboMethod" Then
+                cbo.value = "借方與貸方金額"
+            ElseIf cbo.Name = "cboCredit" Then
+                cbo.value = "原幣貸方金額"
+            ElseIf cbo.Name = "cboDebit" Then
+                cbo.value = "原幣借方金額"
             End If
             Set cbo = Nothing
         End If
