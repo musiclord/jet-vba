@@ -3,7 +3,7 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vValidation
    Caption         =   "Validation"
    ClientHeight    =   5412
    ClientLeft      =   120
-   ClientTop       =   468
+   ClientTop       =   465
    ClientWidth     =   5760
    OleObjectBlob   =   "vValidation.frx":0000
    StartUpPosition =   1  '©ÒÄÝµøµ¡¤¤¥¡

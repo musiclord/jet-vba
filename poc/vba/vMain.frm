@@ -3,8 +3,8 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vMain
    Caption         =   "vMain"
    ClientHeight    =   7410
    ClientLeft      =   120
-   ClientTop       =   468
-   ClientWidth     =   10752
+   ClientTop       =   465
+   ClientWidth     =   10755
    OleObjectBlob   =   "vMain.frx":0000
    StartUpPosition =   1  '©ÒÄÝµøµ¡¤¤¥¡
 End

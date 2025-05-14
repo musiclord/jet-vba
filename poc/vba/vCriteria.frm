@@ -3,7 +3,7 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vCriteria
    Caption         =   "Criteria"
    ClientHeight    =   6576
    ClientLeft      =   120
-   ClientTop       =   468
+   ClientTop       =   465
    ClientWidth     =   10680
    OleObjectBlob   =   "vCriteria.frx":0000
    StartUpPosition =   1  '©ÒÄÝµøµ¡¤¤¥¡

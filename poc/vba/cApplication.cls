@@ -27,9 +27,6 @@ Private m_endDate As String
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
-Attribute vMain.VB_VarHelpID = -1
-Private GLService As GLService
-Private TBService As TBService
 Private ImportService As ImportService
 Private PreviewService As PreviewService
 Private MappingService As MappingService
@@ -58,8 +55,6 @@ Private Sub Class_Initialize()
     Set PreviewService = New PreviewService
     Set MappingService = New MappingService
     Set ValidationService = New ValidationService
-    Set GLService = New GLService
-    Set TBService = New TBService
     Set vMain = New vMain
 End Sub
 
@@ -98,8 +93,8 @@ End Sub
 
 Private Sub vProject_DoConfirm()
     ' 設定專案資訊
-    m_startDate = "#" & vProject.txtbPeriodStart.value & "#"
-    m_endDate = "#" & vProject.txtbPeriodEnd.value & "#"
+    m_startDate = Trim$(vProject.txtbPeriodStart.value)
+    m_endDate = Trim$(vProject.txtbPeriodEnd.value)
     Call PopulateFormComboBoxes(vConfigTB, "TB") ' 將 TB 欄位注入至 vConfigTB
     ' 移至下個視窗
     Call vProject.Hide
@@ -139,6 +134,13 @@ End Sub
 
 Private Sub vConfigGL_DoImport()
     Call ImportCSV("GL")
+    
+    Dim dal As AccessDAL
+    Set dal = New AccessDAL
+    dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    Call ValidationService.Initialize(dal, MappingService, "GL", "TB")
+    Call ValidationService.addLineItem
+    
     Call PopulateFormComboBoxes(vConfigGL, "GL")
 End Sub
 
@@ -164,11 +166,10 @@ Private Sub vValidation_TestCompleteness()
     Dim dtStartDate As Date, dtEndDate As Date ' 更改變數名稱以提高清晰度
     Dim testResult As Boolean
     Dim dal As AccessDAL
-    Dim actualGLTableName As String
-    Dim actualTBTableName As String
+    Dim GLTable As String
+    Dim TBTable As String
     
     On Error GoTo ErrorHandler
-
     ' --- 1. 設定資料 ---
     ' 驗證 m_startDate 和 m_endDate (格式為 "#date#") 並轉換
     If Not IsDate(m_startDate) Then
@@ -180,21 +181,12 @@ Private Sub vValidation_TestCompleteness()
         Err.Raise vbObjectError + 551, MODULE_NAME & "." & METHOD_NAME, "無效的結束日期格式: " & m_endDate
     End If
     dtEndDate = CDate(m_endDate)
-    
-    actualGLTableName = "GL"
-    actualTBTableName = "TB"
-    
+    GLTable = "GL"
+    TBTable = "TB"
     ' --- 2. 建立實例 ---
     Set dal = New AccessDAL
     dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME
-    
-    ' 初始化 ValidationService (假設 ValidationService 已是有效物件)
-    ' 為防禦性起見，如果 ValidationService 為 Nothing，則重新初始化
-    If ValidationService Is Nothing Then
-        Set ValidationService = New ValidationService
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 警告: ValidationService 為 Nothing，已重新初始化。"
-    End If
-    Call ValidationService.Initialize(dal, MappingService, actualGLTableName, actualTBTableName)
+    Call ValidationService.Initialize(dal, MappingService, GLTable, TBTable)
 
     ' --- 3. 執行完整性測試 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 ValidationService.TestCompleteness，期間: " & Format(dtStartDate, "yyyy-mm-dd") & " 到 " & Format(dtEndDate, "yyyy-mm-dd")

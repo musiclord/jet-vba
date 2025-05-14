@@ -3,7 +3,7 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vConfigGL
    Caption         =   "GL Configuration"
    ClientHeight    =   8412.001
    ClientLeft      =   120
-   ClientTop       =   468
+   ClientTop       =   465
    ClientWidth     =   11760
    OleObjectBlob   =   "vConfigGL.frx":0000
    StartUpPosition =   1  '所屬視窗中央
@@ -161,6 +161,8 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
             Set cbo = ctrl
             If cbo.Name = "cboDocumentNo" Then
                 cbo.value = "傳票號碼"
+            ElseIf cbo.Name = "cboAmount" Then
+                cbo.value = "傳票金額"
             ElseIf cbo.Name = "cboMethod" Then
                 cbo.value = "借方與貸方金額"
             ElseIf cbo.Name = "cboDebit" Then
