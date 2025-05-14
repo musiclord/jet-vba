@@ -1,0 +1,544 @@
+
+-------------------------------------------------------
+GL_AAA-明細帳.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Import from Excel     2025/5/9 上午 10:52:36     alienwang
+-------------------------------------------------------
+Imported from:      C:\Users\alienwang\Desktop\2025台大Capstone\GL資料\假資料IDEA測試\GL_AAA.xlsx
+Data Source:      Excel
+Sheet Name:      明細帳
+Number of records:      1474
+First record as title:      TRUE
+Set task = Client.GetImportTask("ImportExcel")
+dbName = "C:\Users\alienwang\Desktop\2025台大Capstone\GL資料\假資料IDEA測試\GL_AAA.xlsx"
+task.FileToImport = dbName
+task.SheetToImport = "明細帳"
+task.OutputFilePrefix = "GL_AAA"
+task.FirstRowIsFieldName = "TRUE"
+task.EmptyNumericFieldAsZero = "FALSE"
+task.PerformTask
+dbName = task.OutputFilePath("明細帳")
+Set task = Nothing
+Client.OpenDatabase(dbName)
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 10:53:10     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\GL_AAA-明細帳.IDM
+Old Field Name:      日期
+Old Field Type:      Character
+Old Field Length:      10
+Old Field Equation: 
+Old Description: 
+New Field Name:      日期
+New Field Type:      Date
+New Field Equation:      YYYY/MM/DD
+New Description: 
+Set db = Client.OpenDatabase("GL_AAA-明細帳.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "日期"
+field.Description = ""
+field.Type = WI_DATE_FIELD
+field.Equation = "YYYY/MM/DD"
+task.ReplaceField "日期", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 10:53:10     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\GL_AAA-明細帳.IDM
+Old Field Name:      傳票號碼
+Old Field Type:      Numeric
+Old Field Decimal Places:      0
+Old Field Equation: 
+Old Description: 
+New Field Name:      傳票號碼
+New Field Type:      Character
+New Field Length:      4
+New Field Equation: 
+New Description: 
+Set db = Client.OpenDatabase("GL_AAA-明細帳.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "傳票號碼"
+field.Description = ""
+field.Type = WI_CHAR_FIELD
+field.Equation = ""
+field.Length = 4
+task.ReplaceField "傳票號碼", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Append Field     2025/5/9 上午 10:59:19     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\GL_AAA-明細帳.IDM
+Field name:      K_項次
+Field Type:      Numeric
+Field Decimal Places:      0
+Field Equation:      1
+Field Description: 
+Set db = Client.OpenDatabase("GL_AAA-明細帳.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "K_項次"
+field.Description = ""
+field.Type = WI_NUM_FIELD
+field.Equation = "1"
+field.Decimals = 0
+task.AppendField field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Index Database     2025/5/9 上午 10:59:19     alienwang
+-------------------------------------------------------
+Indexed by:      傳票號碼/A
+Set db = Client.OpenDatabase("GL_AAA-明細帳.IDM")
+Set task = db.Index
+task.AddKey "傳票號碼", "A"
+task.Index FALSE
+Set task = Nothing
+Set db = Nothing
+
+-------------------------------------------------------
+#GL#.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Record Extraction     2025/5/9 上午 11:01:28     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Number of records:      1474
+Control field:      No Control Total
+Control total:      No Control Total
+Extraction from:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\GL_AAA-明細帳.IDM
+Number of records:      1474
+Indexed by:      No index
+Extraction Range:      1 - 1474
+Extraction Criteria:      @BetweenDate( 日期 ,"20240101","20241231")
+Creating a virtual database:      No
+Set db = Client.OpenDatabase("GL_AAA-明細帳.IDM")
+Set task = db.Extraction
+task.IncludeAllFields
+dbName = "#GL#.IDM"
+task.AddExtraction dbName, "", "@BetweenDate( 日期 ,""20240101"",""20241231"")"
+task.CreateVirtualDatabase = False
+task.PerformTask 1, db.Count
+Set task = Nothing
+Set db = Nothing
+Client.OpenDatabase (dbName)
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 11:01:28     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Old Field Name:      傳票號碼
+Old Field Type:      Character
+Old Field Length:      4
+Old Field Equation: 
+Old Description: 
+New Field Name:      傳票號碼_JE
+New Field Type:      Character
+New Field Length:      4
+New Field Equation: 
+New Description:      傳票號碼
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "傳票號碼_JE"
+field.Description = "傳票號碼"
+field.Type = WI_CHAR_FIELD
+field.Equation = ""
+field.Length = 4
+task.ReplaceField "傳票號碼", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 11:01:28     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Old Field Name:      科目代碼
+Old Field Type:      Character
+Old Field Length:      8
+Old Field Equation: 
+Old Description: 
+New Field Name:      會計科目編號_JE
+New Field Type:      Character
+New Field Length:      8
+New Field Equation: 
+New Description:      科目代碼
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "會計科目編號_JE"
+field.Description = "科目代碼"
+field.Type = WI_CHAR_FIELD
+field.Equation = ""
+field.Length = 8
+task.ReplaceField "科目代碼", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 11:01:29     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Old Field Name:      摘要
+Old Field Type:      Character
+Old Field Length:      57
+Old Field Equation: 
+Old Description: 
+New Field Name:      傳票摘要_JE
+New Field Type:      Character
+New Field Length:      57
+New Field Equation: 
+New Description:      摘要
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "傳票摘要_JE"
+field.Description = "摘要"
+field.Type = WI_CHAR_FIELD
+field.Equation = ""
+field.Length = 57
+task.ReplaceField "摘要", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 11:01:29     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Old Field Name:      日期
+Old Field Type:      Date
+Old Field Equation:      YYYYMMDD
+Old Description: 
+New Field Name:      總帳日期_JE
+New Field Type:      Date
+New Field Equation:      YYYYMMDD
+New Description:      日期
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "總帳日期_JE"
+field.Description = "日期"
+field.Type = WI_DATE_FIELD
+field.Equation = "YYYYMMDD"
+task.ReplaceField "日期", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 11:01:29     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Old Field Name:      會計科目
+Old Field Type:      Character
+Old Field Length:      16
+Old Field Equation: 
+Old Description: 
+New Field Name:      會計科目名稱_JE
+New Field Type:      Character
+New Field Length:      16
+New Field Equation: 
+New Description:      會計科目
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "會計科目名稱_JE"
+field.Description = "會計科目"
+field.Type = WI_CHAR_FIELD
+field.Equation = ""
+field.Length = 16
+task.ReplaceField "會計科目", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Modify Field     2025/5/9 上午 11:01:29     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Old Field Name:      K_項次
+Old Field Type:      Numeric
+Old Field Decimal Places:      0
+Old Field Equation: 
+Old Description: 
+New Field Name:      傳票文件項次_JE_S
+New Field Type:      Numeric
+New Field Decimal Places:      0
+New Field Equation: 
+New Description:      K_項次
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "傳票文件項次_JE_S"
+field.Description = "K_項次"
+field.Type = WI_NUM_FIELD
+field.Equation = ""
+field.Decimals = 0
+task.ReplaceField "K_項次", field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Append Field     2025/5/9 上午 11:01:29     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Field name:      傳票金額_JE
+Field Type:      Numeric
+Field Decimal Places:      0
+Field Equation:      本幣借方金額 - 本幣貸方金額
+Field Description:      傳票金額_JE 由系統產生 : 本幣借方金額-本幣貸方金額
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "傳票金額_JE"
+field.Description = "傳票金額_JE 由系統產生 : 本幣借方金額-本幣貸方金額"
+field.Type = WI_NUM_FIELD
+field.Equation = "本幣借方金額 - 本幣貸方金額"
+field.Decimals = 0
+task.AppendField field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Rename File     2025/5/9 上午 11:01:31     alienwang
+-------------------------------------------------------
+From:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#In_Period.IDM
+To:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Set ProjectManagement = client.ProjectManagement
+ProjectManagement.RenameDatabase "#GL#In_Period.IDM", "#GL#.IDM"
+Set ProjectManagement = Nothing
+
+-------------------------------------------------------
+Index Database     2025/5/9 上午 11:01:32     alienwang
+-------------------------------------------------------
+Indexed by:      會計科目編號_JE/D
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.Index
+task.AddKey "會計科目編號_JE", "D"
+task.Index FALSE
+Set task = Nothing
+Set db = Nothing
+
+-------------------------------------------------------
+#GL#In_Period.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Record Extraction     2025/5/9 上午 11:01:31     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#In_Period.IDM
+Number of records:      1474
+Control field:      No Control Total
+Control total:      No Control Total
+Extraction from:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Number of records:      1474
+Indexed by:      No index
+Extraction Range:      1 - 1474
+Extraction Criteria:      ALL
+Creating a virtual database:      No
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.Extraction
+task.IncludeAllFields
+dbName = "#GL#In_Period.IDM"
+task.AddExtraction dbName, "", ""
+task.CreateVirtualDatabase = False
+task.PerformTask 1, db.Count
+Set task = Nothing
+Set db = Nothing
+Client.OpenDatabase (dbName)
+
+-------------------------------------------------------
+#GL_Account_Sum.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Summarization     2025/5/9 上午 11:01:33     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL_Account_Sum.IDM
+Number of records:      68
+Control field:      No Control Total
+Control total:      No Control Total
+Summarization from:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL#.IDM
+Number of records:      1474
+Numeric field to total:      傳票金額_JE
+Fields to summarize by:      會計科目編號_JE
+Selected statistics:      Sum
+Set db = Client.OpenDatabase("#GL#.IDM")
+Set task = db.Summarization
+task.AddFieldToSummarize "會計科目編號_JE"
+task.AddFieldToTotal "傳票金額_JE"
+dbName = "#GL_Account_Sum.IDM"
+task.OutputDBName = dbName
+task.CreatePercentField = FALSE
+task.StatisticsToInclude = SM_SUM
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Client.OpenDatabase (dbName)
+
+-------------------------------------------------------
+#Completeness_calculate.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Join Databases     2025/5/9 上午 11:01:33     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#Completeness_calculate.IDM
+Number of records:      68
+Control field:      No Control Total
+Control total:      No Control Total
+Unmatched primary recs:      0
+Unmatched secondary recs:      0
+Join primary file:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#GL_Account_Sum.IDM
+Number of records:      68
+Join secondary file:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#TB#.IDM
+Number of records:      68
+Type of join:      All records in both files
+Key used:      會計科目編號_JE/A - 會計科目編號_TB/A
+Creating a virtual database:      No
+Set db = Client.OpenDatabase("#GL_Account_Sum.IDM")
+Set task = db.JoinDatabase
+task.FileToJoin "#TB#.IDM"
+task.IncludeAllPFields
+task.IncludeAllSFields
+task.AddMatchKey "會計科目編號_JE", "會計科目編號_TB", "A"
+task.CreateVirtualDatabase = False
+dbName = "#Completeness_calculate.IDM"
+	task.PerformTask dbName, "", WI_JOIN_ALL_REC
+Set task = Nothing
+Set db = Nothing
+Client.OpenDatabase (dbName)
+
+-------------------------------------------------------
+Append Field     2025/5/9 上午 11:01:34     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#Completeness_calculate.IDM
+Field name:      DIFF
+Field Type:      Numeric
+Field Decimal Places:      0
+Field Equation:       試算表變動金額_TB - 傳票金額_JE_SUM
+Field Description: 
+Set db = Client.OpenDatabase("#Completeness_calculate.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "DIFF"
+field.Description = ""
+field.Type = WI_NUM_FIELD
+field.Equation = " 試算表變動金額_TB - 傳票金額_JE_SUM "
+field.Decimals = 0
+task.AppendField field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+Append Field     2025/5/9 上午 11:01:34     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#Completeness_calculate.IDM
+Field name:      ACCOUNT_NUM_ALL
+Field Type:      Virtual Character
+Field length:      8
+Field Equation:      @If( 會計科目編號_JE <> "",  會計科目編號_JE , 會計科目編號_TB )
+Field Description: 
+Set db = Client.OpenDatabase("#Completeness_calculate.IDM")
+Set task = db.TableManagement
+Set field = db.TableDef.NewField
+field.Name = "ACCOUNT_NUM_ALL"
+field.Description = ""
+field.Type = WI_VIRT_CHAR
+field.Equation = "@If( 會計科目編號_JE <> """",  會計科目編號_JE , 會計科目編號_TB )"
+field.Length = 8
+task.AppendField field
+task.PerformTask
+Set task = Nothing
+Set db = Nothing
+Set field = Nothing
+
+-------------------------------------------------------
+#Completeness_Check.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Record Extraction     2025/5/9 上午 11:01:34     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#Completeness_Check.IDM
+Number of records:      68
+Control field:      No Control Total
+Control total:      No Control Total
+Extraction from:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#Completeness_calculate.IDM
+Number of records:      68
+Indexed by:      No index
+Extraction Range:      1 - 68
+Extraction Criteria:      ALL
+Creating a virtual database:      No
+Set db = Client.OpenDatabase("#Completeness_calculate.IDM")
+Set task = db.Extraction
+task.AddFieldToInc "ACCOUNT_NUM_ALL"
+task.AddFieldToInc "會計科目名稱_TB"
+task.AddFieldToInc "試算表變動金額_TB"
+task.AddFieldToInc "傳票金額_JE_SUM"
+task.AddFieldToInc "DIFF"
+dbName = "#Completeness_Check.IDM"
+task.AddExtraction dbName, "", ""
+task.CreateVirtualDatabase = False
+task.PerformTask 1, db.Count
+Set task = Nothing
+Set db = Nothing
+Client.OpenDatabase (dbName)
+
+-------------------------------------------------------
+#List_of_accounts_with_variance.IDM
+-------------------------------------------------------
+
+-------------------------------------------------------
+Record Extraction     2025/5/9 上午 11:01:36     alienwang
+-------------------------------------------------------
+File name:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#List_of_accounts_with_variance.IDM
+Number of records:      0
+Control field:      No Control Total
+Control total:      No Control Total
+Extraction from:      C:\Users\alienwang\Documents\My IDEA Documents\IDEA Projects\台大Capstone_\#Completeness_Check.IDM
+Number of records:      68
+Indexed by:      No index
+Extraction Range:      1 - 68
+Extraction Criteria:      @Abs( DIFF ) > 0
+Creating a virtual database:      No
+Set db = Client.OpenDatabase("#Completeness_Check.IDM")
+Set task = db.Extraction
+task.IncludeAllFields
+dbName = "#List_of_accounts_with_variance.IDM"
+task.AddExtraction dbName, "", "@Abs( DIFF ) > 0"
+task.CreateVirtualDatabase = False
+task.PerformTask 1, db.Count
+Set task = Nothing
+Set db = Nothing
+Client.OpenDatabase (dbName)
