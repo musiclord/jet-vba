@@ -168,7 +168,10 @@ Public Function CreateTableFromFilter(ByVal criteriaCollection As Collection, By
 
             ' === 修改這裡的值格式處理邏輯 ===
             ' 特殊處理科目代碼欄位：強制使用字串格式，不論值是否看起來像數字
-            If fieldName = "科目代碼" Then
+            If fieldName = "科目代碼" Or fieldName = "傳票號碼" Or _
+               fieldName = "帳戶" Or fieldName = "統一編號" Or _
+               fieldName = "文件號碼" Then
+            ' 這些欄位一律視為字串處理
                 formattedValue = "'" & Replace(value, "'", "''") & "'"
             ' 如果有其他需要特殊處理的欄位，在這裡添加 ElseIf 條件
             Else
