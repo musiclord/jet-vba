@@ -24,6 +24,8 @@ Private Const MAX_ROWS_TO_SHOW As Long = 1000
 ' --- 成員變數 ---
 Private m_startDate As String
 Private m_endDate As String
+Private m_GLTable As String
+Private m_TBTable As String
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
@@ -264,25 +266,51 @@ End Sub
 
 ' ====== vCriteria ======
 Private Sub vCriteria_DoClear()
-    Dim ctrl As MSForms.Control
-    For Each ctrl In vCriteria.Controls
-    
-    Next ctrl
+
 End Sub
 
 Private Sub vCriteria_DoConfirm()
     Const METHOD_NAME As String = "vCriteria_DoConfirm"
     Dim criteria As Collection
     Dim rs As Object ' ADODB.Recordset
+    Dim destinationTableName As String
+    Dim dbPath As String
     Dim filterSuccess As Boolean
     Dim previewWorksheetName As String
+    Dim previewSuccess As Boolean
+    previewSuccess = False
     filterSuccess = False
     previewWorksheetName = "Filtered_GL_Data" ' 預覽工作表的名稱
+    destinationTableName = "criteria_result" ' 您想要的結果資料表名稱
+    dbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    m_GLTable = "GL"
     Set criteria = vCriteria.GetFilterCriteria()
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 FilterService.CreateTableFromFilter for table: " & destinationTableName
+    filterSuccess = FilterService.CreateTableFromFilter(criteria, m_GLTable, destinationTableName)
+    If filterSuccess Then
+        MsgBox "篩選條件已成功應用，結果已存入資料表 '" & destinationTableName & "'。", vbInformation, "篩選成功"
+        
+        ' 嘗試預覽新建立的資料表
+        Application.StatusBar = "正在載入資料表 [" & destinationTableName & "] 的預覽..."
+        Application.Cursor = xlWait
+        If PreviewService.ShowPreview(dbPath, destinationTableName, destinationTableName & "_Preview", MAX_ROWS_TO_SHOW) Then
+            previewSuccess = True
+            Application.StatusBar = False
+            Application.Cursor = xlDefault
+            MsgBox "資料表 [" & destinationTableName & "] 預覽完成！", vbInformation, "預覽完成"
+        Else
+            Application.StatusBar = False
+            Application.Cursor = xlDefault
+            MsgBox "成功建立資料表 '" & destinationTableName & "'，但預覽時發生錯誤。", vbExclamation, "預覽錯誤"
+        End If
+    Else
+        MsgBox "套用篩選條件並建立結果資料表 '" & destinationTableName & "' 時發生錯誤。", vbExclamation, "篩選失敗"
+    End If
+
+    
     
     Dim status As Boolean
     status = True ' Define status = True or False
-    
     If status Then
         vMain.lblCriteria.BackColor = vbGreen
     Else

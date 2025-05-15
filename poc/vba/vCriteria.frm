@@ -3,7 +3,7 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vCriteria
    Caption         =   "Criteria"
    ClientHeight    =   6585
    ClientLeft      =   120
-   ClientTop       =   465
+   ClientTop       =   468
    ClientWidth     =   10680
    OleObjectBlob   =   "vCriteria.frx":0000
    StartUpPosition =   1  '所屬視窗中央
@@ -121,7 +121,7 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
         ElseIf ctrl.Name = "cboOperator1" Then
             ctrl.value = ">="
         ElseIf ctrl.Name = "txtbValue1" Then
-            ctrl.value = "1000000000"
+            ctrl.value = "1000000"
         ElseIf ctrl.Name = "cboColumn2" Then
             ctrl.value = "科目代碼"
         ElseIf ctrl.Name = "cboOperator2" Then

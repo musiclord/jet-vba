@@ -125,3 +125,113 @@ ErrorHandler:
     Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & ": " & Err.Description
     Set ApplyFilter = Nothing ' 確保錯誤時回傳 Nothing
 End Function
+
+Public Function CreateTableFromFilter(ByVal criteriaCollection As Collection, ByVal sourceTableName As String, ByVal destinationTableName As String) As Boolean
+    Const METHOD_NAME As String = "CreateTableFromFilter"
+    Dim sql As String
+    Dim whereClause As String
+    Dim criterion As Object ' Scripting.Dictionary
+    Dim fieldName As String
+    Dim operator As String
+    Dim value As String
+    Dim formattedValue As String
+    Dim firstCondition As Boolean
+    Dim recordsAffected As Long
+
+    On Error GoTo ErrorHandler
+    CreateTableFromFilter = False ' 預設失敗
+    firstCondition = True
+    whereClause = ""
+    recordsAffected = -1
+
+    If m_AccessDAL Is Nothing Then
+        Err.Raise vbObjectError + 501, MODULE_NAME & "." & METHOD_NAME, "AccessDAL 未初始化。"
+        Exit Function
+    End If
+
+    ' 確保資料庫已連接
+    If Not m_AccessDAL.IsConnected() Then
+        If Not m_AccessDAL.Connect() Then
+             Err.Raise vbObjectError + 502, MODULE_NAME & "." & METHOD_NAME, "無法連接到資料庫。"
+            Exit Function
+        End If
+    End If
+
+    ' --- 1. 建構 WHERE 子句 (與 ApplyFilter 邏輯類似) ---
+    If Not (criteriaCollection Is Nothing Or criteriaCollection.Count = 0) Then
+        For Each criterion In criteriaCollection
+            fieldName = Trim$(CStr(criterion("Field")))
+            operator = Trim$(CStr(criterion("Operator")))
+            value = Trim$(CStr(criterion("Value")))
+
+            If fieldName = "" Or operator = "" Or value = "" Then GoTo NextCriterion
+
+            ' === 修改這裡的值格式處理邏輯 ===
+            ' 特殊處理科目代碼欄位：強制使用字串格式，不論值是否看起來像數字
+            If fieldName = "科目代碼" Then
+                formattedValue = "'" & Replace(value, "'", "''") & "'"
+            ' 如果有其他需要特殊處理的欄位，在這裡添加 ElseIf 條件
+            Else
+                ' 一般欄位處理邏輯
+                If IsNumeric(value) Then
+                    formattedValue = value
+                Else
+                    formattedValue = "'" & Replace(value, "'", "''") & "'"
+                End If
+            End If
+
+            If Not firstCondition Then
+                whereClause = whereClause & " AND "
+            Else
+                firstCondition = False
+            End If
+
+            Select Case operator
+                Case "=="
+                    whereClause = whereClause & "[" & fieldName & "] = " & formattedValue
+                Case ">="
+                    whereClause = whereClause & "[" & fieldName & "] >= " & formattedValue
+                Case "<="
+                    whereClause = whereClause & "[" & fieldName & "] <= " & formattedValue
+                Case Else
+                    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 警告: 未知的運算子 '" & operator & "'，此條件將被忽略。"
+                    If Right$(whereClause, 5) = " AND " Then
+                        whereClause = Left$(whereClause, Len(whereClause) - 5)
+                    End If
+                    firstCondition = (Trim$(whereClause) = "")
+                    GoTo NextCriterion
+            End Select
+NextCriterion:
+        Next criterion
+    End If
+
+    ' --- 2. 嘗試刪除已存在的目標資料表 ---
+    ' DropTable 內部有自己的錯誤處理，如果資料表不存在，它不會引發錯誤使此處中斷
+    m_AccessDAL.DropTable destinationTableName
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 嘗試刪除舊的資料表: " & destinationTableName
+
+    ' --- 3. 建構 SELECT INTO SQL ---
+    sql = "SELECT * INTO [" & destinationTableName & "] FROM [" & sourceTableName & "]"
+
+    If Trim$(whereClause) <> "" Then
+        sql = sql & " WHERE " & whereClause
+    End If
+    sql = sql & ";"
+
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 執行的 SQL: " & sql
+
+    ' --- 4. 執行 SQL ---
+    recordsAffected = m_AccessDAL.ExecuteSQL(sql)
+
+    If recordsAffected <> -1 Then
+        CreateTableFromFilter = True ' SQL 執行成功 (對於 SELECT INTO，影響的記錄數可能為 0 或更多)
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料表 '" & destinationTableName & "' 建立成功，影響記錄數: " & recordsAffected
+    Else
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 建立資料表 '" & destinationTableName & "' 失敗。"
+    End If
+
+    Exit Function
+ErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & ": " & Err.Description
+    CreateTableFromFilter = False
+End Function
