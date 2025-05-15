@@ -343,7 +343,7 @@ Public Function GetTableNames() As Variant ' Returns array of table names or Emp
     
     Set rs = m_conn.OpenSchema(20, Array(Empty, Empty, Empty, "TABLE"))
     Do While Not rs.EOF
-        tblName = rs.Fields("TABLE_NAME").value ' Use Fields collection by name
+        tblName = rs.fields("TABLE_NAME").value ' Use Fields collection by name
         ' Filter out system tables (MSys*) and temporary tables (~*)
         If Not (Left$(tblName, 4) = "MSys" Or Left$(tblName, 1) = "~") Then
             tblList.Add tblName
@@ -398,8 +398,8 @@ Public Function GetScalar(ByVal sql As String) As Variant
     
     ' --- 3. 檢查是否有結果並獲取值 ---
     If Not rs.EOF Then
-        If Not IsNull(rs.Fields(0).value) Then
-            GetScalar = rs.Fields(0).value
+        If Not IsNull(rs.fields(0).value) Then
+            GetScalar = rs.fields(0).value
         End If
     End If
     
@@ -529,7 +529,7 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
     Else
         Set fieldNamesList = New Collection ' Use VBA's built-in Collection
         Do While Not rsSchema.EOF
-            fieldName = rsSchema.Fields("COLUMN_NAME").value
+            fieldName = rsSchema.fields("COLUMN_NAME").value
             fieldNamesList.Add fieldName ' Add to collection
             rsSchema.MoveNext
         Loop

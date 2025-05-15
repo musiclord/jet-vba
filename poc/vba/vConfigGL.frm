@@ -1,7 +1,7 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vConfigGL 
    Caption         =   "GL Configuration"
-   ClientHeight    =   8412.001
+   ClientHeight    =   8415.001
    ClientLeft      =   120
    ClientTop       =   465
    ClientWidth     =   11760

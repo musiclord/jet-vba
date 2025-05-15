@@ -27,10 +27,12 @@ Private m_endDate As String
 
 ' --- 模組變數 ---
 Private WithEvents vMain As vMain
+Attribute vMain.VB_VarHelpID = -1
 Private ImportService As ImportService
 Private PreviewService As PreviewService
 Private MappingService As MappingService
 Private ValidationService As ValidationService
+Private FilterService As FilterService
 
 ' --- Step 1 ---
 Private WithEvents vProject As vProject
@@ -55,6 +57,8 @@ Private Sub Class_Initialize()
     Set PreviewService = New PreviewService
     Set MappingService = New MappingService
     Set ValidationService = New ValidationService
+    Set FilterService = New FilterService
+    
     Set vMain = New vMain
 End Sub
 
@@ -79,10 +83,21 @@ Private Sub vMain_DoStep3()
     Set vCriteria = New vCriteria
     Call PopulateFormComboBoxes(vCriteria, "GL")
     Call vCriteria.Show(vbModeless)
+    
+    Dim dal As AccessDAL
+    Set dal = New AccessDAL
+    dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    Call FilterService.Initialize(dal, MappingService, "GL", "TB")
+    
 End Sub
 
 Private Sub vMain_DoStep4()
-    ' ...
+    Dim status As Boolean
+    If status Then
+        vMain.lblExportWP.BackColor = vbGreen
+    Else
+        vMain.lblExportWP.BackColor = vbRed
+    End If
 End Sub
 
 ' ====== vProject ======
@@ -99,7 +114,7 @@ Private Sub vProject_DoConfirm()
     ' 移至下個視窗
     Call vProject.Hide
     Call vConfigTB.Show(vbModeless)
-    vMain.lblProject.BackColor = vbYellow
+    vMain.lblProject.BackColor = vbGreen
 End Sub
 
 ' ====== vConfigTB ======
@@ -123,7 +138,7 @@ Private Sub vConfigTB_DoConfirm()
     ' 移至下個視窗
     Call vConfigTB.Hide
     Call vConfigGL.Show(vbModeless)
-    vMain.lblImportTB.BackColor = vbYellow
+    vMain.lblImportTB.BackColor = vbGreen
 End Sub
 
 ' ====== vConfigGL ======
@@ -152,7 +167,7 @@ Private Sub vConfigGL_DoConfirm()
     Call ProcessAndStoreFormMappings(vConfigGL, "GL") ' 處理並儲存 GL 欄位配對
     ' 移至下個視窗
     Call vConfigGL.Hide
-    vMain.lblImportGL.BackColor = vbYellow
+    vMain.lblImportGL.BackColor = vbGreen
 End Sub
 
 ' ====== vValidation ======
@@ -195,7 +210,7 @@ Private Sub vValidation_TestCompleteness()
     ' --- 4. 向使用者提供回饋 ---
     If testResult Then
         MsgBox "完整性測試完成：未發現差異。", vbInformation, "測試結果"
-        If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbYellow ' 表示成功
+        If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbGreen ' 表示成功
     Else
         ' 使用 ValidationService 中 Public 的 COMPLETE_DIFF 常數
         MsgBox "完整性測試完成：發現差異。" & vbCrLf & _
@@ -217,15 +232,30 @@ CleanUp:
 End Sub
 
 Private Sub vValidation_TestDocumentBalance()
-    vMain.lblDocumentBalance.BackColor = vbYellow
+    Dim status As Boolean
+    If status Then
+        vMain.lblDocumentBalance.BackColor = vbGreen
+    Else
+        vMain.lblDocumentBalance.BackColor = vbRed
+    End If
 End Sub
 
 Private Sub vValidation_TestRDE()
-    vMain.lblRDETest.BackColor = vbYellow
+    Dim status As Boolean
+    If status Then
+        vMain.lblRDETest.BackColor = vbGreen
+    Else
+        vMain.lblRDETest.BackColor = vbRed
+    End If
 End Sub
 
 Private Sub vValidation_DoAccountMapping()
-    vMain.lblAccountMapping.BackColor = vbYellow
+    Dim status As Boolean
+    If status Then
+        vMain.lblAccountMapping.BackColor = vbGreen
+    Else
+        vMain.lblAccountMapping.BackColor = vbRed
+    End If
 End Sub
 
 Private Sub vValidation_DoConfirm()
@@ -233,9 +263,31 @@ Private Sub vValidation_DoConfirm()
 End Sub
 
 ' ====== vCriteria ======
+Private Sub vCriteria_DoClear()
+    Dim ctrl As MSForms.Control
+    For Each ctrl In vCriteria.Controls
+    
+    Next ctrl
+End Sub
+
 Private Sub vCriteria_DoConfirm()
-    Call vCriteria.Hide
-    vMain.lblCriteria.BackColor = vbYellow
+    Const METHOD_NAME As String = "vCriteria_DoConfirm"
+    Dim criteria As Collection
+    Dim rs As Object ' ADODB.Recordset
+    Dim filterSuccess As Boolean
+    Dim previewWorksheetName As String
+    filterSuccess = False
+    previewWorksheetName = "Filtered_GL_Data" ' 預覽工作表的名稱
+    Set criteria = vCriteria.GetFilterCriteria()
+    
+    Dim status As Boolean
+    status = True ' Define status = True or False
+    
+    If status Then
+        vMain.lblCriteria.BackColor = vbGreen
+    Else
+        vMain.lblCriteria.BackColor = vbRed
+    End If
 End Sub
 
 Private Sub vCriteria_DoExit()
@@ -476,3 +528,5 @@ ErrorHandler:
     MsgBox "處理 '" & mappingType & "' 欄位對應時發生錯誤：" & vbCrLf & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
     GoTo CleanUp
 End Function
+
+

@@ -1,7 +1,7 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vCriteria 
    Caption         =   "Criteria"
-   ClientHeight    =   6576
+   ClientHeight    =   6585
    ClientLeft      =   120
    ClientTop       =   465
    ClientWidth     =   10680
@@ -15,20 +15,20 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
-
 Public Event DoExit()
 Public Event DoConfirm()
+Public Event DoClear()
 
-
-Private Sub cboOperator1_Change()
-
+Private Sub btnReset_Click()
+    RaiseEvent DoClear
+    
 End Sub
 
 Private Sub UserForm_Initialize()
     ' Me.Show (vbModeless)
     Dim operators As Variant
     Dim op As Variant
-    operators = Array("IN", ">", "<", "=")
+    operators = Array("HAS", ">=", "<=", "==")
     ' 填入 cboOperator1
     Me.cboOperator1.Clear
     For Each op In operators
@@ -50,6 +50,8 @@ End Sub
 Private Sub btnExit_Click()
     RaiseEvent DoExit
 End Sub
+
+
 
 ' --- 公共方法，用於從外部填入指定的 ComboBox ---
 Public Sub PopulateComboBoxes(fieldNames As Variant)
@@ -108,8 +110,29 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
         Err.Clear ' 清除錯誤
     End If
     On Error GoTo ErrorHandler ' 恢復正常錯誤處理
-
-
+    
+    
+    ' ##########################################################################################################
+    ' 填入預設值
+    Dim ctrl As MSForms.Control
+    For Each ctrl In Me.Controls
+        If ctrl.Name = "cboColumn1" Then
+            ctrl.value = "傳票金額"
+        ElseIf ctrl.Name = "cboOperator1" Then
+            ctrl.value = ">="
+        ElseIf ctrl.Name = "txtbValue1" Then
+            ctrl.value = "1000000000"
+        ElseIf ctrl.Name = "cboColumn2" Then
+            ctrl.value = "科目代碼"
+        ElseIf ctrl.Name = "cboOperator2" Then
+            ctrl.value = "=="
+        ElseIf ctrl.Name = "txtbValue2" Then
+            ctrl.value = "5300"
+        ElseIf ctrl.Name = "txtbDescription" Then
+            ctrl.value = "針對大金額進料進行查核，確認進料是否屬實。"
+        End If
+    Next ctrl
+    ' ##########################################################################################################
     Debug.Print Me.Name & "." & METHOD_NAME & " - 已嘗試將 " & UBound(fieldNames) + 1 & " 個欄位填入 " & populatedCount & " 個目標 ComboBox。"
     Exit Sub
 
@@ -120,3 +143,59 @@ ErrorHandler:
     ' 避免在 PopulateComboBoxes 中顯示 MsgBox，讓呼叫端處理更嚴重的錯誤
     ' MsgBox "填入 '" & Me.Caption & "' 的下拉選單時發生錯誤：" & vbCrLf & Err.Description, vbCritical, "錯誤"
 End Sub
+
+Public Function GetFilterCriteria() As Collection
+    Const METHOD_NAME As String = "GetFilterCriteria"
+    Dim colCriteria As Collection
+    Dim dictCriterion As Object ' Scripting.Dictionary
+    Dim key As Variant
+
+    On Error GoTo ErrorHandler
+    Set colCriteria = New Collection
+
+    ' 條件組 1 (對應圖片中的 "本幣借方金額")
+    If Me.cboColumn1.ListIndex <> -1 And Me.cboOperator1.ListIndex <> -1 And Trim$(Me.txtbValue1.value) <> "" Then
+        Set dictCriterion = CreateObject("Scripting.Dictionary")
+        dictCriterion("Field") = Me.cboColumn1.value
+        dictCriterion("Operator") = Me.cboOperator1.value
+        dictCriterion("Value") = Trim$(Me.txtbValue1.value)
+        colCriteria.Add dictCriterion
+        ' --- 開始 Debug Print ---
+        Debug.Print "--- Debug: Adding Criterion to colCriteria ---"
+        For Each key In dictCriterion.Keys
+            Debug.Print "  " & key & ": """ & dictCriterion(key) & """"
+        Next key
+        Debug.Print "--- End Debug ---"
+        ' --- 結束 Debug Print ---
+        Set dictCriterion = Nothing
+    End If
+
+    ' 條件組 2 (對應圖片中的 "科目代碼")
+    If Me.cboColumn2.ListIndex <> -1 And Me.cboOperator2.ListIndex <> -1 And Trim$(Me.txtbValue2.value) <> "" Then
+        Set dictCriterion = CreateObject("Scripting.Dictionary")
+        dictCriterion("Field") = Me.cboColumn2.value
+        dictCriterion("Operator") = Me.cboOperator2.value
+        dictCriterion("Value") = Trim$(Me.txtbValue2.value)
+        colCriteria.Add dictCriterion
+        ' --- 開始 Debug Print ---
+        Debug.Print "--- Debug: Adding Criterion to colCriteria ---"
+        For Each key In dictCriterion.Keys
+            Debug.Print "  " & key & ": """ & dictCriterion(key) & """"
+        Next key
+        Debug.Print "--- End Debug ---"
+        ' --- 結束 Debug Print ---
+        Set dictCriterion = Nothing
+    End If
+    
+    ' 您可以在此處擴展以包含表單上其他可能的篩選條件組
+    ' 例如，如果還有 cboColumn3, cboOperator3, txtbValue3 等
+
+    Set GetFilterCriteria = colCriteria
+    Exit Function
+
+ErrorHandler:
+    Debug.Print "錯誤於 " & Me.Name & "." & METHOD_NAME & ": " & Err.Description
+    Set GetFilterCriteria = Nothing ' 發生錯誤時回傳 Nothing
+    Set colCriteria = Nothing
+    Set dictCriterion = Nothing
+End Function

@@ -148,12 +148,12 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
     ' --- 將資料寫入 Excel --- (原步驟 6-9)
     If Not (rs.EOF And rs.BOF) Then ' 檢查是否有記錄
         rs.MoveFirst
-        fieldCount = rs.Fields.Count
+        fieldCount = rs.fields.Count
         recordCount = rs.recordCount ' 從離線 Recordset 取得 RecordCount
 
         ' 寫入標頭
         For i = 0 To fieldCount - 1
-            ws.Cells(1, i + 1).value = rs.Fields(i).Name
+            ws.Cells(1, i + 1).value = rs.fields(i).Name
         Next i
 
         ' 複製資料
@@ -163,7 +163,7 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
 
         ' 格式化日期 (可選)
         For i = 0 To fieldCount - 1
-            If rs.Fields(i).Type = adDate Then
+            If rs.fields(i).Type = adDate Then
                 If recordCount > 0 Then
                      ws.Range("A2").Offset(0, i).Resize(recordCount, 1).NumberFormat = "yyyy/mm/dd"
                 End If
@@ -175,9 +175,9 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
     Else
         ' 處理空資料表：如果可能，寫入標頭
         If Not rs Is Nothing Then
-             If rs.Fields.Count > 0 Then
-                 For i = 0 To rs.Fields.Count - 1
-                    ws.Cells(1, i + 1).value = rs.Fields(i).Name
+             If rs.fields.Count > 0 Then
+                 For i = 0 To rs.fields.Count - 1
+                    ws.Cells(1, i + 1).value = rs.fields(i).Name
                 Next i
                 ws.columns.AutoFit
              Else

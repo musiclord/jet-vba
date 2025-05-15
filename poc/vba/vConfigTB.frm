@@ -1,7 +1,7 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vConfigTB 
    Caption         =   "TB Configuration"
-   ClientHeight    =   8412.001
+   ClientHeight    =   8415.001
    ClientLeft      =   120
    ClientTop       =   465
    ClientWidth     =   11760
@@ -101,7 +101,7 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
             Set cbo = ctrl
             If cbo.Name = "cboMethod" Then
                 cbo.Clear
-                cbo.List = Array("年度變動金額", "期初與期末金額", "借方與貸方金額", "借貸方之期初期末金額")
+                cbo.List = Array("變動金額", "期初與期末金額", "借方與貸方金額", "借貸方之期初期末金額")
                 cbo.ListIndex = -1 ' 預設不選中
             End If
             Set cbo = Nothing ' 確保在循環中釋放
@@ -150,6 +150,8 @@ Public Sub PopulateComboBoxes(fieldNames As Variant)
                 cbo.value = "項目名稱"
             ElseIf cbo.Name = "cboAccountNo" Then
                 cbo.value = "會計項目"
+            ElseIf cbo.Name = "cboChange" Then
+                cbo.value = "借-貸(本幣)"
             ElseIf cbo.Name = "cboMethod" Then
                 cbo.value = "借方與貸方金額"
             ElseIf cbo.Name = "cboCredit" Then

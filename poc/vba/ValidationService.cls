@@ -42,12 +42,16 @@ Public Sub addLineItem()
     Dim sql As String
     Dim affected As Long
     
-    ' 新增欄位
-    'sql = "ALTER TABLE GL ADD COLUMN 項次 INTEGER;"
-    'affected = m_AccessDAL.ExecuteSQL(sql)
+    ' 新增 ID 欄位
+    sql = "ALTER TABLE GL ADD COLUMN ID AUTOINCREMENT PRIMARY KEY;"
+    affected = m_AccessDAL.ExecuteSQL(sql)
     ' 新增項次
-    'sql = ""
-    'affected = m_AccessDAL.ExecuteSQL(sql)
+    sql = "ALTER TABLE GL ADD COLUMN 項次 INTEGER;"
+    affected = m_AccessDAL.ExecuteSQL(sql)
+    ' 計算項次
+    sql = ""
+    ' affected = m_AccessDAL.ExecuteSQL(sql)
+    Debug.Print
     ' 借-貸
     sql = "ALTER TABLE GL ADD COLUMN 傳票金額 DOUBLE;"
     affected = m_AccessDAL.ExecuteSQL(sql)
@@ -62,13 +66,13 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
     Dim glMappings As Object 'Scripting.Dictionary
     Dim tbMappings As Object 'Scripting.Dictionary
     Dim diffTableName As String
-    Dim diff As Long ' 用於儲存差異資料表的記錄數
+    Dim DIFF As Long ' 用於儲存差異資料表的記錄數
     Dim affected As Long ' 用於檢查 ExecuteSQL 的結果
     diffTableName = Me.COMPLETE_DIFF
     
     On Error GoTo ErrorHandler
     TestCompleteness = False ' 預設失敗或找到差異
-    diff = -1 ' 預設錯誤或未執行
+    DIFF = -1 ' 預設錯誤或未執行
     
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " : 嘗試刪除資料表: " & diffTableName
     m_AccessDAL.DropTable diffTableName
@@ -97,6 +101,8 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
 
     ' TB 欄位變數
     Set tbMappings = m_MappingService.GetTBFieldMappings()
+    Dim tbChange As String
+    tbChange = tbMappings("Change")
     Dim tbAccountNumber As String
     tbAccountNumber = tbMappings("AccountNumber")
     Dim tbAccountName As String
@@ -108,68 +114,59 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
 
     ' --- 2. 準備資料 ---
     Dim sStart As String
-    sStart = Format(startDate, "yyyy\-MM\-dd")
+    sStart = Format(startDate, "\#yyyy\-MM\-dd\#")
     Dim sEnd As String
-    sEnd = Format(endDate, "yyyy\-MM\-dd")
+    sEnd = Format(endDate, "\#yyyy\-MM\-dd\#")
     
     ' --- 3. SQL查詢 ---
     Dim sql As String
-    Dim GL_In_Period As String
     
-    ' -------> Record Extraction - @BetweenDate()
+    ' ==============> ALTER DATA TYPE
+    Dim fieldsArray As Variant, fieldName As Variant
+    fieldsArray = Array(tbChange, tbCredit, tbDebit)
+    For Each fieldName In fieldsArray:
+        sql = "ALTER TABLE " & m_TBTable & " ALTER COLUMN [" & fieldName & "] DOUBLE;"
+        affected = m_AccessDAL.ExecuteSQL(sql)
+        Debug.Print MODULE_NAME & ".TestCompleteness - 執行 ALTER: " & vbCrLf & sql
+    Next fieldName
+    
+    ' ==============> Record Extraction - @BetweenDate()
+    Dim GL_In_Period As String
     GL_In_Period = "GL_In_Period"
     ' SELECT GL.* INTO GL_In_Period FROM GL
-    ' WHERE CDate(GL.[日期]) >= 2024-01-01AND CDate(GL.[日期]) <= 2024-12-31;
+    ' WHERE CDate(GL.[日期]) >= #2024-01-01# AND CDate(GL.[日期]) <= #2024-12-31#;
     sql = "SELECT " & m_GLTable & ".* INTO " & GL_In_Period & _
             " FROM " & m_GLTable & " WHERE CDate(" & m_GLTable & ".[" & glPostDate & "]) " & _
-            ">= " & sStart & "AND CDate(" & m_GLTable & ".[" & glPostDate & "]) " & _
+            ">= " & sStart & " AND CDate(" & m_GLTable & ".[" & glPostDate & "]) " & _
             "<= " & sEnd & ";"
-    
-    If m_AccessDAL.TableExists(GL_In_Period) Then
-        Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & GL_In_Period & "' 已存在，將其刪除。"
-        m_AccessDAL.DropTable GL_In_Period
-    Else
-        Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & GL_In_Period & "' 不存在，無需刪除。"
-    End If
+    IfExist (GL_In_Period)
     Debug.Print MODULE_NAME & ".TestCompleteness - 執行 SQL: " & vbCrLf & sql
     affected = m_AccessDAL.ExecuteSQL(sql)
-    Debug.Print MODULE_NAME & ".TestCompleteness - 不在日期區間: " & affected
+    Debug.Print MODULE_NAME & ".TestCompleteness - 在日期區間: " & affected
     
-    ' -------> Summarization - AddFieldToSummarize "會計科目編號_JE", AddFieldToTotal "傳票金額_JE"
+    ' ==============> Summarization - AddFieldToSummarize "會計科目編號_JE", AddFieldToTotal "傳票金額_JE"
     Dim GL_Account_Sum As String, Sum_傳票金額 As String
     GL_Account_Sum = "GL_Account_Sum"
     Sum_傳票金額 = "Sum_傳票金額"
+    IfExist (GL_Account_Sum)
     ' SELECT GL.科目代碼, SUM(GL.傳票金額) AS Sum_傳票金額
     ' INTO GL_Account_Sum FROM GL GROUP BY GL.科目代碼;
     sql = "SELECT " & m_GLTable & "." & glAccountNumber & _
           ", SUM(" & m_GLTable & "." & glAmount & ") AS " & Sum_傳票金額 & _
           " INTO " & GL_Account_Sum & " FROM " & m_GLTable & _
           " GROUP BY " & m_GLTable & "." & glAccountNumber & ";"
-    
-    If m_AccessDAL.TableExists(GL_Account_Sum) Then
-        Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & GL_Account_Sum & "' 已存在，將其刪除。"
-        m_AccessDAL.DropTable GL_Account_Sum
-    Else
-        Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & GL_Account_Sum & "' 不存在，無需刪除。"
-    End If
     Debug.Print MODULE_NAME & ".TestCompleteness - 執行 SQL: " & vbCrLf & sql
     affected = m_AccessDAL.ExecuteSQL(sql)
     Debug.Print MODULE_NAME & ".TestCompleteness - 依科目代碼分類加總: " & affected
     
-    ' -------> Join Databases, primary: #GL_Account_Sum.IDM, secondary: #TB#.IDM
+    ' ==============> Join Databases, primary: #GL_Account_Sum.IDM, secondary: #TB#.IDM
     Dim Completeness_calculate As String, LeftJ As String, RightJ As String
     Completeness_calculate = "Completeness_calculate"
     LeftJ = "temp_Left"
     RightJ = "temp_Right"
-    If m_AccessDAL.TableExists(Completeness_calculate) Then
-        m_AccessDAL.DropTable Completeness_calculate
-    ElseIf m_AccessDAL.TableExists(LeftJ) Then
-        m_AccessDAL.DropTable LeftJ
-    ElseIf m_AccessDAL.TableExists(RightJ) Then
-        m_AccessDAL.DropTable RightJ
-    Else
-        Debug.Print MODULE_NAME & ".TestCompleteness - 聯集用資料表無需刪除。"
-    End If
+    IfExist (LeftJ)
+    IfExist (RightJ)
+    IfExist (Completeness_calculate)
     '->LEFT JOIN
     'SELECT GL_Account_Sum.*, TB.* INTO LeftJ
     'FROM GL_Account_Sum LEFT JOIN TB ON GL_Account_Sum.科目代碼 = TB.會計項目;
@@ -191,16 +188,61 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
           "(SELECT * FROM " & LeftJ & " UNION SELECT * FROM " & RightJ & " );"
     affected = m_AccessDAL.ExecuteSQL(sql)
     
+    ' ==============> Append Field, equation: [試算表變動金額_TB] - [傳票金額_JE_SUM]
+    '->APPEND colDIFF
+    Dim colDIFF As String
+    colDIFF = "DIFF"
+    sql = "ALTER TABLE Completeness_calculate ADD COLUMN [" & colDIFF & "] DOUBLE;"
+    affected = m_AccessDAL.ExecuteSQL(sql)
     
+    '->UPDATE colDIFF
+    sql = "UPDATE [" & Completeness_calculate & "] SET [" & colDIFF & "] = ([" & tbChange & "] - [" & Sum_傳票金額 & "]);"
+    affected = m_AccessDAL.ExecuteSQL(sql)
+    
+    '-> APPEND ACCOUNT_NUM_ALL
+    Dim ACCOUNT_NUM_ALL As String
+    ACCOUNT_NUM_ALL = "ACCOUNT_NUM_ALL"
+    'ALTER TABLE Completeness_calculate ADD COLUMN ACCOUNT_NUM_ALL TEXT(8);
+    sql = "ALTER TABLE [" & Completeness_calculate & "]" & vbCrLf & _
+          "ADD COLUMN [" & ACCOUNT_NUM_ALL & "] TEXT (8);"
+    affected = m_AccessDAL.ExecuteSQL(sql)
+    
+    '-> UPDATE ACCOUNT_NUM_ALL
+    'UPDATE Completeness_calculate SET ACCOUNT_NUM_ALL = Left(IIF(Nz([科目代碼], "") <> "", [科目代碼], [會計項目]), 8);
+    sql = "UPDATE [" & Completeness_calculate & "]" & vbCrLf & _
+          "SET [" & ACCOUNT_NUM_ALL & "] = Left(IIF([" & glAccountNumber & "] IS NOT NULL AND [" & glAccountNumber & "] <> """", [" & glAccountNumber & "], [" & tbAccountName & "]), 8);"
+    Debug.Print MODULE_NAME & ".TestCompleteness - ?? SQL (Update ACCOUNT_NUM_ALL): " & vbCrLf & sql
+    affected = m_AccessDAL.ExecuteSQL(sql)
+    
+    '==============> EXTRACT FIELDS TO Completeness_Check
+    Dim Completeness_Check As String
+    Completeness_Check = "Completeness_Check"
+    IfExist (Completeness_Check)
+    'SELECT [ACCOUNT_NUM_ALL], [會計科目名稱_TB], [試算表變動金額_TB], [傳票金額_JE_SUM], [DIFF]
+    'INTO Completeness_Check FROM Completeness_calculate;
+    sql = "SELECT [" & ACCOUNT_NUM_ALL & "], [" & tbAccountName & "], [" & Sum_傳票金額 & "], [" & colDIFF & "]" & vbCrLf & _
+          "INTO [" & Completeness_Check & "] FROM [" & Completeness_calculate & "];"
+    affected = m_AccessDAL.ExecuteSQL(sql)
+    
+    '==============> Record Extraction TO List_of_accounts_with_variance
+    Dim List_of_accounts_with_variance As String
+    List_of_accounts_with_variance = "List_of_accounts_with_variance"
+    IfExist (List_of_accounts_with_variance)
+    'SELECT * INTO List_of_accounts_with_variance
+    'FROM Completeness_Check WHERE Abs([DIFF]) > 0;
+    sql = "SELECT * INTO [" & List_of_accounts_with_variance & "]" & vbCrLf & _
+          "FROM [" & Completeness_Check & "] WHERE Abs([" & colDIFF & "]) > 0;"
+    affected = m_AccessDAL.ExecuteSQL(sql)
+    Debug.Print MODULE_NAME & ": Extraction to List_of_accounts_with_variance -> " & affected
     
     ' --- 4. 透過計算新資料表中的記錄數來檢查是否找到差異 ---
-    diff = m_AccessDAL.GetRecordCount(diffTableName)
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - " & diffTableName & " 中的記錄數: " & diff
+    DIFF = m_AccessDAL.GetRecordCount(List_of_accounts_with_variance)
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - " & List_of_accounts_with_variance & " 中的記錄數: " & DIFF
     
-    If diff = -1 Then
+    If DIFF = -1 Then
         TestCompleteness = False
         Err.Raise vbObjectError + 520, MODULE_NAME & "." & METHOD_NAME, "獲取差異資料表 '" & diffTableName & "' 的記錄數失敗。"
-    ElseIf diff = 0 Then
+    ElseIf DIFF = 0 Then
         TestCompleteness = True ' 沒有差異記錄，測試通過
     Else
         TestCompleteness = False ' 存在差異記錄，測試未通過
@@ -217,6 +259,15 @@ ErrorHandler:
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description ' 將錯誤向上拋給呼叫者
     GoTo CleanUp
 End Function
+
+Private Sub IfExist(ByVal table As String)
+    If m_AccessDAL.TableExists(table) Then
+        Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & table & "' 已存在，將其刪除。"
+        m_AccessDAL.DropTable table
+    Else
+        Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & table & "' 不存在，無需刪除。"
+    End If
+End Sub
 
 Private Sub Class_Terminate()
     Set m_AccessDAL = Nothing
