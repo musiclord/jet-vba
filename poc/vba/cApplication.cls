@@ -35,6 +35,7 @@ Private PreviewService As PreviewService
 Private MappingService As MappingService
 Private ValidationService As ValidationService
 Private FilterService As FilterService
+Private ScenarioService As ScenarioService
 
 ' --- Step 1 ---
 Private WithEvents vProject As vProject
@@ -53,6 +54,8 @@ Private WithEvents vCriteria As vCriteria
 Attribute vCriteria.VB_VarHelpID = -1
 
 ' --- Step 4 ---
+Private WithEvents vScenario As vScenario
+Attribute vScenario.VB_VarHelpID = -1
 
 Private Sub Class_Initialize()
     Set ImportService = New ImportService
@@ -94,11 +97,16 @@ Private Sub vMain_DoStep3()
 End Sub
 
 Private Sub vMain_DoStep4()
+    Set ScenarioService = New ScenarioService
+    Set vScenario = New vScenario
+    Call ScenarioService.Initialize(dal, "./data/test_scenario.accdb")
+    Call vScenario.Show(vbModeless)
+    
     Dim status As Boolean
     If status Then
-        vMain.lblExportWP.BackColor = vbGreen
+        vMain.lblTestCases.BackColor = vbGreen
     Else
-        vMain.lblExportWP.BackColor = vbRed
+        vMain.lblTestCases.BackColor = vbRed
     End If
 End Sub
 
@@ -171,6 +179,7 @@ Private Sub vConfigGL_DoConfirm()
     Call vConfigGL.Hide
     vMain.lblImportGL.BackColor = vbGreen
 End Sub
+
 
 ' ====== vValidation ======
 Private Sub vValidation_DoExit()
@@ -274,7 +283,7 @@ Private Sub vCriteria_DoConfirm()
     Dim criteria As Collection
     Dim rs As Object ' ADODB.Recordset
     Dim destinationTableName As String
-    Dim dbPath As String
+    Dim DbPath As String
     Dim filterSuccess As Boolean
     Dim previewWorksheetName As String
     Dim previewSuccess As Boolean
@@ -282,7 +291,7 @@ Private Sub vCriteria_DoConfirm()
     filterSuccess = False
     previewWorksheetName = "Filtered_GL_Data" ' 預覽工作表的名稱
     destinationTableName = "criteria_result" ' 您想要的結果資料表名稱
-    dbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    DbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
     m_GLTable = "GL"
     Set criteria = vCriteria.GetFilterCriteria()
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 呼叫 FilterService.CreateTableFromFilter for table: " & destinationTableName
@@ -293,7 +302,7 @@ Private Sub vCriteria_DoConfirm()
         ' 嘗試預覽新建立的資料表
         Application.StatusBar = "正在載入資料表 [" & destinationTableName & "] 的預覽..."
         Application.Cursor = xlWait
-        If PreviewService.ShowPreview(dbPath, destinationTableName, destinationTableName & "_Preview", MAX_ROWS_TO_SHOW) Then
+        If PreviewService.ShowPreview(DbPath, destinationTableName, destinationTableName & "_Preview", MAX_ROWS_TO_SHOW) Then
             previewSuccess = True
             Application.StatusBar = False
             Application.Cursor = xlDefault
@@ -321,6 +330,36 @@ End Sub
 Private Sub vCriteria_DoExit()
     Unload vCriteria
     Set vCriteria = Nothing
+End Sub
+
+' ====== vScenario ======
+
+Private Sub vScenario_DoExit()
+    Call vScenario.Hide
+    
+End Sub
+
+Private Sub vScenario_RunCase1()
+    ' Do scenario 1
+    Const METHOD As String = "RunCase1"
+    Dim scenarioResult As Boolean
+    
+    scenarioResult = ScenarioService.ExecuteScenario1
+    
+End Sub
+
+Private Sub vScenario_RunCase2()
+    ' Do scenario 2
+    Const METHOD As String = "RunCase2"
+    Dim scenarioResult As Boolean
+    
+End Sub
+
+Private Sub vScenario_RunCase3()
+    ' Do scenario 3
+    Const METHOD As String = "RunCase3"
+    Dim scenarioResult As Boolean
+    
 End Sub
 
 '-------------------------------------------------------------------------------
@@ -456,7 +495,7 @@ Private Sub PopulateFormComboBoxes(ByVal targetForm As Object, ByVal tableName A
     Const METHOD_NAME As String = "PrepareAndPopulateFormComboBoxes"
     Dim fieldNames As Variant
     Dim dal As AccessDAL ' 臨時 DAL 物件
-    Dim dbPath As String
+    Dim DbPath As String
 
     On Error GoTo ErrorHandler
 
@@ -467,15 +506,15 @@ Private Sub PopulateFormComboBoxes(ByVal targetForm As Object, ByVal tableName A
     End If
 
     ' --- 1. 取得指定資料表的欄位名稱 ---
-    dbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    DbPath = ThisWorkbook.Path & "\" & DATABASE_NAME
     
     ' 不再檢查檔案是否存在，而是讓 AccessDAL.Connect() 處理
     Set dal = New AccessDAL
-    dal.DatabasePath = dbPath
+    dal.DatabasePath = DbPath
     
     ' 連接資料庫 (不存在時會自動建立)
     If Not dal.Connect() Then
-        MsgBox "無法連接或建立資料庫：" & vbCrLf & dbPath, vbCritical, MODULE_NAME & "." & METHOD_NAME
+        MsgBox "無法連接或建立資料庫：" & vbCrLf & DbPath, vbCritical, MODULE_NAME & "." & METHOD_NAME
         fieldNames = Empty
     Else
         ' 資料庫連接成功後，再獲取欄位名稱

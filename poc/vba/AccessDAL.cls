@@ -12,21 +12,21 @@ Option Explicit
 Private Const MODULE_NAME As String = "AccessDAL"
 Private Const DB_PROVIDER As String = "Microsoft.ACE.OLEDB.12.0"
 Private m_conn As Object ' - Late binding
-Private m_dbPath As String
+Private m_DbPath As String
 
 ' --- Public Properties ---
 
 Public Property Get DatabasePath() As String
-    DatabasePath = m_dbPath
+    DatabasePath = m_DbPath
 End Property
 
 Public Property Let DatabasePath(ByVal value As String)
     If m_conn Is Nothing Then
-        m_dbPath = value
+        m_DbPath = value
     ElseIf IsConnected() Then
         Err.Raise vbObjectError + 513, MODULE_NAME & ".DatabasePath", "Cannot change DatabasePath while connection is open."
     Else
-        m_dbPath = value
+        m_DbPath = value
     End If
 End Property
 
@@ -41,13 +41,13 @@ Public Function Connect() As Boolean
     On Error GoTo ErrorHandler ' 設定錯誤處理
 
     ' --- 1. 檢查資料庫路徑 ---
-    If m_dbPath = "" Then
+    If m_DbPath = "" Then
          Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "DatabasePath is not set." ' 資料庫路徑未設定
     End If
 
     ' --- 2. 檢查資料庫檔案是否存在 ---
     Set fso = CreateObject("Scripting.FileSystemObject") ' 建立檔案系統物件
-    If Not fso.FileExists(m_dbPath) Then
+    If Not fso.FileExists(m_DbPath) Then
         ' --- 3. 如果資料庫不存在則建立 (使用 ADOX - 後期綁定) ---
         Dim cat As Object ' ADOX.Catalog - Late Binding
         Dim createConnStr As String
@@ -63,7 +63,7 @@ Public Function Connect() As Boolean
 
         ' 用於建立資料庫的連接字串
         createConnStr = "Provider=" & DB_PROVIDER & ";" & _
-                        "Data Source=" & m_dbPath & ";"
+                        "Data Source=" & m_DbPath & ";"
                         ' 建立時不需要 Persist Security Info
 
         On Error Resume Next ' 處理資料庫建立過程中可能發生的錯誤
@@ -74,14 +74,14 @@ Public Function Connect() As Boolean
             Set cat = Nothing
             Set fso = Nothing
             Err.Clear ' 清除錯誤後再引發新錯誤
-            Err.Raise vbObjectError + 519, MODULE_NAME & "." & METHOD_NAME, "Failed to create new database file at '" & m_dbPath & "'. Error: " & createErrorDesc ' 建立新資料庫檔案失敗
+            Err.Raise vbObjectError + 519, MODULE_NAME & "." & METHOD_NAME, "Failed to create new database file at '" & m_DbPath & "'. Error: " & createErrorDesc ' 建立新資料庫檔案失敗
             GoTo CleanUp ' 若建立失敗則離開
         End If
         On Error GoTo ErrorHandler ' 恢復預設錯誤處理
 
         Set cat = Nothing ' 釋放 ADOX 物件
         dbCreated = True ' 標記資料庫已建立
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Successfully created new database file: " & m_dbPath ' 成功建立新資料庫檔案
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Successfully created new database file: " & m_DbPath ' 成功建立新資料庫檔案
     End If
     Set fso = Nothing ' 釋放 FileSystemObject
 
@@ -94,13 +94,13 @@ Public Function Connect() As Boolean
         Dim connStr As String
         ' 設定連接字串
         connStr = "Provider=" & DB_PROVIDER & ";" & _
-                  "Data Source=" & m_dbPath & ";" & _
+                  "Data Source=" & m_DbPath & ";" & _
                   "Persist Security Info=False;"
         m_conn.ConnectionString = connStr ' 設定連線物件的連接字串
         m_conn.Open ' 開啟連線
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection opened successfully to: " & m_dbPath ' 成功開啟連線
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection opened successfully to: " & m_DbPath ' 成功開啟連線
     Else
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection was already open to: " & m_dbPath ' 連線已開啟
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection was already open to: " & m_DbPath ' 連線已開啟
     End If
 
     Connect = IsConnected() ' 設定函數回傳值為目前的連線狀態
@@ -574,8 +574,8 @@ End Function
 Private Sub Class_Initialize()
     ' Set default database path, or leave empty to force setting it
     On Error Resume Next ' Avoid error if ThisWorkbook is not available (e.g., during compilation)
-    m_dbPath = ThisWorkbook.Path & "\default.accdb"
-    If Err.Number <> 0 Then m_dbPath = "" ' Reset if error occurred
+    m_DbPath = ThisWorkbook.Path & "\default.accdb"
+    If Err.Number <> 0 Then m_DbPath = "" ' Reset if error occurred
     On Error GoTo 0
 End Sub
 
