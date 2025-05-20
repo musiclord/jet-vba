@@ -248,7 +248,7 @@ Public Function TestCompleteness(ByVal startDate As Date, ByVal endDate As Date)
         TestCompleteness = False ' 存在差異記錄，測試未通過
     End If
 
-CleanUp:
+Cleanup:
     Set glMappings = Nothing
     Set tbMappings = Nothing
     Exit Function
@@ -257,7 +257,7 @@ ErrorHandler:
     TestCompleteness = False
     Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & " (行號: " & Erl & "): " & Err.Description & " (錯誤碼: " & Err.Number & ")"
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description ' 將錯誤向上拋給呼叫者
-    GoTo CleanUp
+    GoTo Cleanup
 End Function
 
 Private Sub IfExist(ByVal table As String)

@@ -30,7 +30,7 @@ Public Function GetAccessTableNames(ByVal accessDbPath As String) As Variant
 
     GetAccessTableNames = tableNames ' Return the variant array
 
-CleanUp:
+Cleanup:
     Set dal = Nothing
     Exit Function
 
@@ -42,7 +42,7 @@ ErrorHandler:
     ' Let the caller (cApplication) handle the error message to the user
     ' Return Empty to indicate failure
     GetAccessTableNames = Empty
-    GoTo CleanUp
+    GoTo Cleanup
 End Function
 
 Private Function FindOrCreatePreviewSheet() As Worksheet
@@ -195,7 +195,7 @@ Public Function ShowPreview(ByVal accessDbPath As String, ByVal tableName As Str
     ' 7. 成功 (原步驟 10)
     ShowPreview = True
 
-CleanUp:
+Cleanup:
     On Error Resume Next
     If Not rs Is Nothing Then If rs.State = 1 Then rs.Close
     Set rs = Nothing
@@ -214,7 +214,7 @@ ErrorHandler:
     Application.ScreenUpdating = True
     ' 將錯誤引發給呼叫者 (cApplication)
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp
+    GoTo Cleanup
 End Function
 
 

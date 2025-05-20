@@ -41,7 +41,7 @@ Public Function DetectCSVEncoding(ByVal filePath As String) As Long
             If bomBytes(0) = &HEF And bomBytes(1) = &HBB And bomBytes(2) = &HBF Then
                 detectedEncoding = 65001 ' UTF-8 with BOM
                 Debug.Print "檢測到 UTF-8 編碼 (BOM)"
-                GoTo CleanUp ' 已確定，跳到清理步驟
+                GoTo Cleanup ' 已確定，跳到清理步驟
             End If
         End If
         
@@ -123,7 +123,7 @@ Public Function DetectCSVEncoding(ByVal filePath As String) As Long
         Debug.Print "檔案為空或只含 ASCII，使用預設編碼: " & defaultEncoding
     End If
 
-CleanUp:
+Cleanup:
     DetectCSVEncoding = detectedEncoding ' 返回最終檢測結果
     Set stream = Nothing ' 確保釋放
     On Error GoTo 0 ' 恢復正常錯誤處理

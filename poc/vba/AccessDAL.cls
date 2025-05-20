@@ -57,7 +57,7 @@ Public Function Connect() As Boolean
         If Err.Number <> 0 Then
             Set fso = Nothing
             Err.Raise vbObjectError + 518, MODULE_NAME & "." & METHOD_NAME, "Failed to create ADOX.Catalog object. Ensure 'Microsoft ADO Ext. for DDL and Security' components are available or registered." ' 建立 ADOX Catalog 物件失敗
-            GoTo CleanUp ' 若 ADOX 物件建立失敗則離開
+            GoTo Cleanup ' 若 ADOX 物件建立失敗則離開
         End If
         On Error GoTo ErrorHandler ' 恢復預設錯誤處理
 
@@ -75,7 +75,7 @@ Public Function Connect() As Boolean
             Set fso = Nothing
             Err.Clear ' 清除錯誤後再引發新錯誤
             Err.Raise vbObjectError + 519, MODULE_NAME & "." & METHOD_NAME, "Failed to create new database file at '" & m_DbPath & "'. Error: " & createErrorDesc ' 建立新資料庫檔案失敗
-            GoTo CleanUp ' 若建立失敗則離開
+            GoTo Cleanup ' 若建立失敗則離開
         End If
         On Error GoTo ErrorHandler ' 恢復預設錯誤處理
 
@@ -111,7 +111,7 @@ Public Function Connect() As Boolean
         ' 考慮此處是否適合使用 MsgBox，或僅記錄日誌。記錄日誌的侵入性較小。
     End If
 
-CleanUp: ' 清理標籤
+Cleanup: ' 清理標籤
     Set fso = Nothing ' 確保 FSO 在離開或錯誤時被釋放
     ' Set cat = Nothing ' 確保 ADOX 物件被釋放 (上面已處理，但再次設定是安全的)
     Exit Function ' 離開函數
@@ -124,7 +124,7 @@ ErrorHandler: ' 錯誤處理程序
     Debug.Print "Error Description: " & Err.Description
     ' 將錯誤引發給呼叫者
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
-    GoTo CleanUp ' 引發錯誤後跳至清理程序
+    GoTo Cleanup ' 引發錯誤後跳至清理程序
 End Function
 
 Public Sub Disconnect()
@@ -166,13 +166,13 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
         Debug.Print MODULE_NAME & ".ExecuteSQL - Connection object is Nothing. Attempting to connect..."
         If Not Me.Connect Then ' Assumes Connect method uses m_DatabasePath
             Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "Failed to establish database connection before executing SQL. Check DatabasePath property."
-            GoTo CleanUp ' Exit if connection fails
+            GoTo Cleanup ' Exit if connection fails
         End If
     ElseIf Not IsConnected() Then ' <-- Use IsConnected() which checks m_conn.State
         Debug.Print MODULE_NAME & ".ExecuteSQL - Connection state is not open. Attempting to reconnect..."
         If Not Me.Connect Then ' Try to reconnect
              Err.Raise vbObjectError + 515, MODULE_NAME & "." & METHOD_NAME, "Failed to re-establish database connection before executing SQL. Check DatabasePath property."
-             GoTo CleanUp ' Exit if reconnection fails
+             GoTo Cleanup ' Exit if reconnection fails
         End If
     End If
     ' --- End Enhanced Connection Check ---
@@ -207,7 +207,7 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
             Debug.Print MODULE_NAME & ".ExecuteSQL - ERROR: Database file NOT FOUND at path from connection string: " & dbPathFromConn
             Set fso = Nothing ' Release before raising error
             Err.Raise vbObjectError + 516, MODULE_NAME & "." & METHOD_NAME, "Database file specified in connection string not found: " & dbPathFromConn
-            GoTo CleanUp ' Should not be reached if Err.Raise works
+            GoTo Cleanup ' Should not be reached if Err.Raise works
         Else
             Debug.Print MODULE_NAME & ".ExecuteSQL - Database file confirmed FOUND at path from connection string."
         End If
@@ -224,7 +224,7 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
     
     ExecuteSQL = recordsAffected ' Success
 
-CleanUp:
+Cleanup:
     ' Optional: Decide if connection should be closed here or managed elsewhere
     Exit Function
 
@@ -244,7 +244,7 @@ ErrorHandler:
     Debug.Print "Error Source: " & Err.Source & " (Original Error: " & Err.Description & ")"
     ' Raise a more informative error, including the original description
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, errorDesc
-    GoTo CleanUp ' Should not be reached if Err.Raise works
+    GoTo Cleanup ' Should not be reached if Err.Raise works
 End Function
 
 ' --- Data Query (DQL) ---
@@ -388,7 +388,7 @@ Public Function GetScalar(ByVal sql As String) As Variant
     If Not Me.IsConnected() Then
          If Not Me.Connect Then
              Err.Raise vbObjectError + 515, MODULE_NAME & "." & METHOD_NAME, "無法連接到資料庫。"
-             GoTo CleanUp ' 如果 Err.Raise 正常工作，則不應到達此處
+             GoTo Cleanup ' 如果 Err.Raise 正常工作，則不應到達此處
          End If
     End If
     
@@ -403,7 +403,7 @@ Public Function GetScalar(ByVal sql As String) As Variant
         End If
     End If
     
-CleanUp: ' 清理資源
+Cleanup: ' 清理資源
     On Error Resume Next ' 清理階段忽略錯誤
     If Not rs Is Nothing Then
         If rs.State = 1 Then rs.Close ' 1 = adStateOpen
@@ -418,7 +418,7 @@ ErrorHandler: ' 錯誤處理
     Debug.Print "錯誤: " & Err.Description & " (" & Err.Number & ")"
     ' 將錯誤向上拋給呼叫者
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, "GetScalar 中發生錯誤: " & Err.Description
-    GoTo CleanUp ' 不應到達此處
+    GoTo Cleanup ' 不應到達此處
 End Function
 
 ' 獲取指定資料表的記錄數
@@ -432,14 +432,14 @@ Public Function GetRecordCount(ByVal tableName As String) As Long
 
     If Trim$(tableName) = "" Then
         Err.Raise vbObjectError + 501, MODULE_NAME & "." & METHOD_NAME, "資料表名稱不可為空。"
-        GoTo CleanUp
+        GoTo Cleanup
     End If
 
     ' --- 1. 確保連接 ---
     If Not Me.IsConnected() Then
         If Not Me.Connect() Then
             Err.Raise vbObjectError + 502, MODULE_NAME & "." & METHOD_NAME, "無法連接到資料庫。"
-            GoTo CleanUp
+            GoTo Cleanup
         End If
     End If
 
@@ -448,7 +448,7 @@ Public Function GetRecordCount(ByVal tableName As String) As Long
     If Not Me.TableExists(tableName) Then
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料表 '" & tableName & "' 不存在。返回 0 筆記錄。"
         GetRecordCount = 0 ' 資料表不存在，因此記錄數為 0。
-        GoTo CleanUp
+        GoTo Cleanup
     End If
 
     ' --- 3. 建構 SQL 並獲取計數 ---
@@ -469,7 +469,7 @@ Public Function GetRecordCount(ByVal tableName As String) As Long
         GetRecordCount = CLng(result)
     End If
 
-CleanUp: ' 清理標籤
+Cleanup: ' 清理標籤
     Exit Function
 
 ErrorHandler: ' 錯誤處理程序
@@ -479,7 +479,7 @@ ErrorHandler: ' 錯誤處理程序
     Debug.Print "錯誤: " & Err.Description & " (" & Err.Number & ")"
     ' 將錯誤向上拋給呼叫者
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, "GetRecordCount 中發生錯誤: " & Err.Description
-    GoTo CleanUp ' 不應到達此處
+    GoTo Cleanup ' 不應到達此處
 End Function
 
 Private Function EscapeTableNameForSQL(ByVal rawName As String) As String
@@ -509,7 +509,7 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
     If Not Me.IsConnected Then
         If Not Me.Connect Then
             GetTableFieldNames = Empty
-            GoTo CleanUp
+            GoTo Cleanup
         Else
             Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection successful."
         End If
@@ -548,7 +548,7 @@ Public Function GetTableFieldNames(ByVal tableName As String) As Variant ' Retur
         Set fieldNamesList = Nothing
     End If
 
-CleanUp:
+Cleanup:
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Entering CleanUp phase..."
     If Not rsSchema Is Nothing Then
         If rsSchema.State = 1 Then rsSchema.Close ' adStateOpen = 1
@@ -565,7 +565,7 @@ ErrorHandler:
     Debug.Print "Error Source: " & Err.Source
     Debug.Print "Error Description: " & Err.Description
     GetTableFieldNames = Empty
-    GoTo CleanUp
+    GoTo Cleanup
 End Function
 
 

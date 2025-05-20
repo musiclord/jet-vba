@@ -44,11 +44,11 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
     ' --- 2. 檢查檔案是否存在 ---
     If Not fso.FileExists(csvFilePath) Then
         Err.Raise vbObjectError + 513, MODULE_NAME & ".ImportToAccess", "CSV 檔案未找到: " & csvFilePath
-        GoTo CleanUp
+        GoTo Cleanup
     End If
     If Not fso.FileExists(accessDbPath) Then
         Err.Raise vbObjectError + 514, MODULE_NAME & ".ImportToAccess", "Access 資料庫未找到: " & accessDbPath
-        GoTo CleanUp
+        GoTo Cleanup
     End If
 
     ' --- 3. 設定 ADODB.Stream ---
@@ -99,7 +99,7 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
         Debug.Print "CSV Headers read (" & columnCount & " columns): " & Join(headers, "|")
     Else
         Err.Raise vbObjectError + 515, MODULE_NAME & ".ImportToAccess", "CSV 檔案為空或無法讀取標頭。"
-        GoTo CleanUp
+        GoTo Cleanup
     End If
 
     ' c. 建立新表格 (所有欄位為 TEXT)
@@ -159,7 +159,7 @@ Public Function ImportToAccess(ByVal csvFilePath As String, ByVal accessDbPath A
     ' --- 8. 完成 ---
     ImportToAccess = True
 
-CleanUp:
+Cleanup:
     On Error Resume Next
     If Not adoStream Is Nothing Then
         If adoStream.State = adStateOpen Then adoStream.Close
@@ -188,7 +188,7 @@ ErrorHandler:
         End If
     End If
     ImportToAccess = False
-    GoTo CleanUp
+    GoTo Cleanup
 End Function
 
 ' --- 輔助函數：更可靠地分割 CSV 行 (處理引號) ---

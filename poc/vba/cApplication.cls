@@ -85,29 +85,29 @@ Private Sub vMain_DoStep2()
 End Sub
 
 Private Sub vMain_DoStep3()
-    Set vCriteria = New vCriteria
-    Call PopulateFormComboBoxes(vCriteria, "GL")
-    Call vCriteria.Show(vbModeless)
-    
     Dim dal As AccessDAL
     Set dal = New AccessDAL
+    Set vCriteria = New vCriteria
+    
     dal.DatabasePath = ThisWorkbook.Path & "\" & DATABASE_NAME
+    
     Call FilterService.Initialize(dal, MappingService, "GL", "TB")
+    Call PopulateFormComboBoxes(vCriteria, "GL")
+    Call vCriteria.Show(vbModeless)
     
 End Sub
 
 Private Sub vMain_DoStep4()
+    Dim DbPath As String
+    Dim status As Boolean
     Set ScenarioService = New ScenarioService
     Set vScenario = New vScenario
-    Call ScenarioService.Initialize(dal, "./data/test_scenario.accdb")
+    
+    DbPath = ThisWorkbook.Path & "\data\test_scenario.accdb"
+    
+    Call ScenarioService.Initialize(DbPath, "JE_1", "JE_2", "JE_3") ' 代入資料表名稱
     Call vScenario.Show(vbModeless)
     
-    Dim status As Boolean
-    If status Then
-        vMain.lblTestCases.BackColor = vbGreen
-    Else
-        vMain.lblTestCases.BackColor = vbRed
-    End If
 End Sub
 
 ' ====== vProject ======
@@ -228,14 +228,14 @@ Private Sub vValidation_TestCompleteness()
                "請檢查 Access 資料庫中的 '" & ValidationService.COMPLETE_DIFF & "' 資料表以獲取詳細資訊。", vbExclamation, "測試結果"
         If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = vbRed ' 表示發現差異
     End If
-    GoTo CleanUp
+    GoTo Cleanup
 
 ErrorHandler: ' 錯誤處理程序
     MsgBox "執行完整性測試時發生錯誤：" & vbCrLf & _
            "來源: " & Err.Source & vbCrLf & _
            "描述: " & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
     If Not vMain Is Nothing Then vMain.lblCompletenessTest.BackColor = RGB(255, 165, 0) ' 錯誤時顯示橘色
-CleanUp:
+Cleanup:
     If Not dal Is Nothing Then ' 檢查 dal 物件是否已建立
         dal.Disconnect
     End If
@@ -335,16 +335,36 @@ End Sub
 ' ====== vScenario ======
 
 Private Sub vScenario_DoExit()
-    Call vScenario.Hide
-    
+    If Not vScenario Is Nothing Then
+        vScenario.Hide
+        Unload vScenario
+        Set vScenario = Nothing
+    End If
 End Sub
 
 Private Sub vScenario_RunCase1()
     ' Do scenario 1
     Const METHOD As String = "RunCase1"
-    Dim scenarioResult As Boolean
+    Dim result As Boolean
     
-    scenarioResult = ScenarioService.ExecuteScenario1
+    If ScenarioService Is Nothing Then
+        MsgBox "ScenarioService 尚未初始化。", vbExclamation, MODULE_NAME & "." & METHOD
+        Exit Sub
+    End If
+    
+    Application.Cursor = xlWait
+    
+    result = ScenarioService.ExecuteScenario1()
+    
+    Application.Cursor = xlDefault
+    
+    If result Then
+        MsgBox "Scenario 1 執行成功。", vbInformation, "Scenario 結果"
+        vMain.lblTestCase1.BackColor = vbGreen
+    Else
+        MsgBox "Scenario 1 執行失敗或未達到預期結果。", vbExclamation, "Scenario 結果"
+        vMain.lblTestCase1.BackColor = vbRed
+    End If
     
 End Sub
 
@@ -533,7 +553,7 @@ Private Sub PopulateFormComboBoxes(ByVal targetForm As Object, ByVal tableName A
     End If
     On Error GoTo ErrorHandler ' 恢復正常的錯誤處理
 
-CleanUp:
+Cleanup:
     Set dal = Nothing ' 確保錯誤時也釋放
     Exit Sub
 
@@ -544,7 +564,7 @@ ErrorHandler:
     CallByName targetForm, "PopulateComboBoxes", VbMethod, Empty
     Err.Clear
     On Error GoTo 0 ' 關閉此處的錯誤處理
-    GoTo CleanUp
+    GoTo Cleanup
 End Sub
 
 ' --- 新增: 通用方法，處理並儲存指定表單的欄位對應 ---
@@ -562,7 +582,7 @@ Private Function ProcessAndStoreFormMappings(ByVal sourceForm As Object, ByVal m
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error calling GetFieldMappings on " & TypeName(sourceForm) & ": " & Err.Description
         MsgBox "無法從 '" & TypeName(sourceForm) & "' 表單讀取欄位對應。", vbCritical, MODULE_NAME & "." & METHOD_NAME
         Err.Clear
-        GoTo CleanUp ' 返回 False
+        GoTo Cleanup ' 返回 False
     End If
     On Error GoTo ErrorHandler ' 恢復正常錯誤處理
 
@@ -570,7 +590,7 @@ Private Function ProcessAndStoreFormMappings(ByVal sourceForm As Object, ByVal m
     If formMappings Is Nothing Then
         ' GetFieldMappings 內部應該已經顯示錯誤訊息
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: Failed to get mappings from " & TypeName(sourceForm) & "."
-        GoTo CleanUp ' 返回 False
+        GoTo Cleanup ' 返回 False
     End If
 
     ' ---  將對應關係傳遞給 MappingService ---
@@ -584,16 +604,16 @@ Private Function ProcessAndStoreFormMappings(ByVal sourceForm As Object, ByVal m
         Case Else
             Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: Unknown mappingType '" & mappingType & "'."
             MsgBox "不支援的對應類型：" & mappingType, vbCritical, MODULE_NAME & "." & METHOD_NAME
-            GoTo CleanUp ' 返回 False
+            GoTo Cleanup ' 返回 False
     End Select
 
-CleanUp:
+Cleanup:
     Set formMappings = Nothing
     Exit Function
 
 ErrorHandler:
     MsgBox "處理 '" & mappingType & "' 欄位對應時發生錯誤：" & vbCrLf & Err.Description, vbCritical, MODULE_NAME & "." & METHOD_NAME
-    GoTo CleanUp
+    GoTo Cleanup
 End Function
 
 
