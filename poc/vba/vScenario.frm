@@ -2,9 +2,9 @@ VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} vScenario 
    Caption         =   "Scenarios"
    ClientHeight    =   4656
-   ClientLeft      =   108
-   ClientTop       =   456
-   ClientWidth     =   4584
+   ClientLeft      =   105
+   ClientTop       =   450
+   ClientWidth     =   4590
    OleObjectBlob   =   "vScenario.frx":0000
    StartUpPosition =   1  '©ÒÄÝµøµ¡¤¤¥¡
 End

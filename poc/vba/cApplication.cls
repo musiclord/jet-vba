@@ -371,14 +371,44 @@ End Sub
 Private Sub vScenario_RunCase2()
     ' Do scenario 2
     Const METHOD As String = "RunCase2"
-    Dim scenarioResult As Boolean
+    Dim result As Boolean
+    
+    If ScenarioService Is Nothing Then
+        MsgBox "ScenarioService 尚未初始化。", vbExclamation, MODULE_NAME & "." & METHOD
+        Exit Sub
+    End If
+    
+    result = ScenarioService.ExecuteScenario2()
+    
+    If result Then
+        MsgBox "Scenario 2 執行成功。", vbInformation, "Scenario 結果"
+        vMain.lblTestCase2.BackColor = vbGreen
+    Else
+        MsgBox "Scenario 2 執行失敗或未達預期成果。", vbExclamation, "Scenario 結果"
+        vMain.lblTestCase2.BackColor = vbRed
+    End If
     
 End Sub
 
 Private Sub vScenario_RunCase3()
     ' Do scenario 3
     Const METHOD As String = "RunCase3"
-    Dim scenarioResult As Boolean
+    Dim result As Boolean
+    
+    If ScenarioService Is Nothing Then
+        MsgBox "ScenarioService 尚未初始化。", vbExclamation, MODULE_NAME & "." & METHOD
+        Exit Sub
+    End If
+    
+    result = ScenarioService.ExecuteScenario3()
+    
+    If result Then
+        MsgBox "Scenario 3 執行成功。", vbInformation, "Scenario 結果"
+        vMain.lblTestCase3.BackColor = vbGreen
+    Else
+        MsgBox "Scenario 3 執行失敗或未達預期成果。", vbExclamation, "Scenario 結果"
+        vMain.lblTestCase3.BackColor = vbRed
+    End If
     
 End Sub
 

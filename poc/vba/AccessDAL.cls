@@ -13,6 +13,7 @@ Private Const MODULE_NAME As String = "AccessDAL"
 Private Const DB_PROVIDER As String = "Microsoft.ACE.OLEDB.12.0"
 Private m_conn As Object ' - Late binding
 Private m_DbPath As String
+Private m_EnableDebugPrinting As Boolean
 
 ' --- Public Properties ---
 
@@ -28,6 +29,15 @@ Public Property Let DatabasePath(ByVal value As String)
     Else
         m_DbPath = value
     End If
+End Property
+
+' 新增屬性來控制 Debug.Print
+Public Property Get EnableDebugPrinting() As Boolean
+    EnableDebugPrinting = m_EnableDebugPrinting
+End Property
+
+Public Property Let EnableDebugPrinting(ByVal value As Boolean)
+    m_EnableDebugPrinting = value
 End Property
 
 ' --- Connection Management ---
@@ -98,9 +108,9 @@ Public Function Connect() As Boolean
                   "Persist Security Info=False;"
         m_conn.ConnectionString = connStr ' 設定連線物件的連接字串
         m_conn.Open ' 開啟連線
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection opened successfully to: " & m_DbPath ' 成功開啟連線
+        If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection opened successfully to: " & m_DbPath ' 成功開啟連線
     Else
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection was already open to: " & m_DbPath ' 連線已開啟
+        If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Connection was already open to: " & m_DbPath ' 連線已開啟
     End If
 
     Connect = IsConnected() ' 設定函數回傳值為目前的連線狀態
@@ -117,11 +127,8 @@ Cleanup: ' 清理標籤
     Exit Function ' 離開函數
 
 ErrorHandler: ' 錯誤處理程序
+    If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & "." & METHOD_NAME & " - Error: " & Err.Description
     Connect = False ' 設定函數回傳值為 False (連線失敗)
-    Debug.Print "--- " & MODULE_NAME & "." & METHOD_NAME & " Error ---"
-    Debug.Print "Error Number: " & Err.Number
-    Debug.Print "Error Source: " & Err.Source
-    Debug.Print "Error Description: " & Err.Description
     ' 將錯誤引發給呼叫者
     Err.Raise Err.Number, MODULE_NAME & "." & METHOD_NAME, Err.Description
     GoTo Cleanup ' 引發錯誤後跳至清理程序
@@ -156,20 +163,20 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
     Dim dbPathFromConn As String ' For verification
     ExecuteSQL = -1 ' Default to error
 
-    Debug.Print MODULE_NAME & ".ExecuteSQL - Received SQL: " & sql
+    If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & ".ExecuteSQL - Received SQL: " & sql
 
     On Error GoTo ErrorHandler
 
     ' --- Enhanced Connection Check ---
     ' Check if connection object exists and is open. If not, try to connect.
     If m_conn Is Nothing Then ' <-- Use m_conn
-        Debug.Print MODULE_NAME & ".ExecuteSQL - Connection object is Nothing. Attempting to connect..."
+        If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & ".ExecuteSQL - Connection object is Nothing. Attempting to connect..."
         If Not Me.Connect Then ' Assumes Connect method uses m_DatabasePath
             Err.Raise vbObjectError + 514, MODULE_NAME & "." & METHOD_NAME, "Failed to establish database connection before executing SQL. Check DatabasePath property."
             GoTo Cleanup ' Exit if connection fails
         End If
     ElseIf Not IsConnected() Then ' <-- Use IsConnected() which checks m_conn.State
-        Debug.Print MODULE_NAME & ".ExecuteSQL - Connection state is not open. Attempting to reconnect..."
+        If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & ".ExecuteSQL - Connection state is not open. Attempting to reconnect..."
         If Not Me.Connect Then ' Try to reconnect
              Err.Raise vbObjectError + 515, MODULE_NAME & "." & METHOD_NAME, "Failed to re-establish database connection before executing SQL. Check DatabasePath property."
              GoTo Cleanup ' Exit if reconnection fails
@@ -178,8 +185,10 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
     ' --- End Enhanced Connection Check ---
 
     ' --- Verify Connection String and Path Existence (Optional but recommended) ---
-    Debug.Print MODULE_NAME & ".ExecuteSQL - Connection State before Execute: " & CStr(m_conn.State) ' <-- Use m_conn
-    Debug.Print MODULE_NAME & ".ExecuteSQL - Connection String before Execute: " & m_conn.ConnectionString ' <-- Use m_conn
+    If m_EnableDebugPrinting Then
+        Debug.Print MODULE_NAME & ".ExecuteSQL - Connection State before Execute: " & CStr(m_conn.State) ' <-- Use m_conn
+        Debug.Print MODULE_NAME & ".ExecuteSQL - Connection String before Execute: " & m_conn.ConnectionString ' <-- Use m_conn
+    End If
 
     ' Extract database path from the current connection string for verification
     On Error Resume Next ' In case connection string parsing fails or lacks "Data Source"
@@ -197,9 +206,9 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
     On Error GoTo ErrorHandler ' Restore default error handling
     
     If dbPathFromConn = "" Then
-         Debug.Print MODULE_NAME & ".ExecuteSQL - WARNING: Could not extract database path from connection string: " & m_conn.ConnectionString ' <-- Use m_conn
+        Debug.Print MODULE_NAME & ".ExecuteSQL - WARNING: Could not extract database path from connection string: " & m_conn.ConnectionString ' <-- Use m_conn
     Else
-        Debug.Print MODULE_NAME & ".ExecuteSQL - Extracted DB Path from Connection: '" & dbPathFromConn & "'"
+        If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & ".ExecuteSQL - Extracted DB Path from Connection: '" & dbPathFromConn & "'"
         ' Use FileSystemObject for a more robust check
         Dim fso As Object
         Set fso = CreateObject("Scripting.FileSystemObject")
@@ -209,13 +218,13 @@ Public Function ExecuteSQL(ByVal sql As String, Optional ByVal useTransaction As
             Err.Raise vbObjectError + 516, MODULE_NAME & "." & METHOD_NAME, "Database file specified in connection string not found: " & dbPathFromConn
             GoTo Cleanup ' Should not be reached if Err.Raise works
         Else
-            Debug.Print MODULE_NAME & ".ExecuteSQL - Database file confirmed FOUND at path from connection string."
+            If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & ".ExecuteSQL - Database file confirmed FOUND at path from connection string."
         End If
         Set fso = Nothing
     End If
     ' --- End Verification ---
     
-    Debug.Print MODULE_NAME & ".ExecuteSQL - Executing SQL on connection..."
+    If m_EnableDebugPrinting Then Debug.Print MODULE_NAME & ".ExecuteSQL - Executing SQL on connection..."
     If useTransaction Then m_conn.BeginTrans ' <-- Use m_conn
     
     m_conn.Execute sql, recordsAffected, 128 ' adExecuteNoRecords = 128 <-- Use m_conn
@@ -284,7 +293,7 @@ End Function
 
 ' --- Schema Operations ---
 
-Public Function TableExists(ByVal tableName As String) As Boolean
+Public Function tableExists(ByVal tableName As String) As Boolean
     Const METHOD_NAME As String = "TableExists"
     Dim rs As Object ' ADODB.Recordset
     On Error GoTo ErrorHandler
@@ -295,13 +304,13 @@ Public Function TableExists(ByVal tableName As String) As Boolean
     
     ' adSchemaTables = 20
     Set rs = m_conn.OpenSchema(20, Array(Empty, Empty, tableName, "TABLE"))
-    TableExists = Not rs.EOF
+    tableExists = Not rs.EOF
     rs.Close
     Set rs = Nothing
     Exit Function
 
 ErrorHandler:
-    TableExists = False ' Assume false on error
+    tableExists = False ' Assume false on error
     If Not rs Is Nothing Then
         If rs.State = 1 Then rs.Close ' adStateOpen = 1
         Set rs = Nothing
@@ -315,7 +324,7 @@ Public Sub DropTable(ByVal tableName As String)
     Dim sql As String
     On Error GoTo ErrorHandler
     
-    If TableExists(tableName) Then
+    If tableExists(tableName) Then
         sql = "DROP TABLE [" & EscapeTableNameForSQL(tableName) & "]" ' Modified to use EscapeTableNameForSQL
         ExecuteSQL sql
     End If
@@ -445,7 +454,7 @@ Public Function GetRecordCount(ByVal tableName As String) As Long
 
     ' --- 2. 在嘗試計數之前檢查資料表是否存在 ---
     '    如果 GetScalar 本身不檢查，這可以防止 GetScalar 因資料表不存在而失敗。
-    If Not Me.TableExists(tableName) Then
+    If Not Me.tableExists(tableName) Then
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料表 '" & tableName & "' 不存在。返回 0 筆記錄。"
         GetRecordCount = 0 ' 資料表不存在，因此記錄數為 0。
         GoTo Cleanup

@@ -261,7 +261,7 @@ ErrorHandler:
 End Function
 
 Private Sub IfExist(ByVal table As String)
-    If m_AccessDAL.TableExists(table) Then
+    If m_AccessDAL.tableExists(table) Then
         Debug.Print MODULE_NAME & ".TestCompleteness - 資料表 '" & table & "' 已存在，將其刪除。"
         m_AccessDAL.DropTable table
     Else

@@ -35,9 +35,20 @@ ErrorHandler:
 End Sub
 
 Public Function ExecuteScenario1()
-    ' 短時間內高頻交易
+    ' --- 篩選條件1 : 短時間內高頻交易 ---
+    '
+    '  特徵:
+    '    - 在1天/1週/1個月內，對同一個銀行帳戶，進行多次交易且金額累積後龐大
+    '    - 對銀行帳戶同一天/連續數天進行相同金額之交易 -> 可能為假交易或重複做分錄之錯誤
+    '  假設:
+    '    1.「會計科目」欄位先篩有「活存」字眼者之所有分錄
+    '    2. 根據審計員輸入之時間區段(1天/1週/1個月)，觸發相對應計算金額/頻率的函式
+    '    3. 根據審計員輸入之門檻值，判斷該時間區段之金額/頻率是否超過門檻值
+    '    4. 超過門檻值，回報為異常分錄
+    
     Const METHOD_NAME As String = "ExecuteScenario1"
     Dim success As Boolean
+    success = False
     
     If Not m_dal.Connect Then
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: 無法連接到案例資料庫: " & m_dal.DatabasePath
@@ -55,192 +66,297 @@ Public Function ExecuteScenario1()
     
     On Error GoTo ErrorHandler
     
-    ' --- 步驟 0: 清理/準備可能已存在的表格 ---
-    tableToDrop = Array("deposit_credit", "date_counterparty_count", "day_error_count", "date_counterparty_sum", "day_error_sum", "week7+2cycle", "week_countandsum", "week_error_count", "week_error_sum", "month30+8cycle", "month_countandsum", "month_error_count", "month_error_sum")
+    ' --- 1 ─ 篩選銀行存款貸方交易紀錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 查詢銀行存款及貸方餘額"
+    Dim deposit_credit As String
+    deposit_credit = m_JE1 & "_deposit_credit"
+    DropExist (deposit_credit)
     
-    For Each tbl In tableToDrop
-        On Error Resume Next
-        m_dal.ExecuteSQL "DROP TABLE [" & tbl & "];"
-    Next tbl
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & "- 舊表格清理完畢。"
-    
-    ' --- 步驟 1. 篩選銀行存款貸方交易紀錄 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 1. 查詢銀行存款及貸方餘額:" & vbCrLf & _
-                "FROM [JE_1] INTO [deposit_credit]"
-    sql = "SELECT * INTO deposit_credit " & _
+    sql = "SELECT * INTO [" & deposit_credit & "] " & _
           "FROM [" & m_JE1 & "] " & _
           "WHERE [會計科目] = '銀行存款' AND [本幣貸方金額] <> 0;"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 2.1. 計算每日各交易對手交易筆數 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 2.1. 同一日同一交易對手交易筆數:" & vbCrLf & _
-                "FROM [deposit_credit] INTO [date_counterparty_count]"
-    sql = "SELECT [日期], [交易對手帳戶], COUNT(*) AS [同一日同一交易對手交易筆數] " & _
-          "INTO date_counterparty_count " & _
-          "FROM deopsit_credit " & _
+    ' --- 2.1 ─ 計算每日各交易對手交易筆數  ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 同一日同一交易對手交易筆數"
+    Dim date_counterparty_count As String
+    date_counterparty_count = m_JE1 & "_date_counterparty_count"
+    DropExist (date_counterparty_count)
+    
+    sql = "SELECT [日期], [交易對手帳戶], COUNT(*) " & _
+          "AS [同一日同一交易對手交易筆數] INTO [" & date_counterparty_count & "] " & _
+          "FROM [" & deposit_credit & "] " & _
           "GROUP BY [日期], [交易對手帳戶];"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 2.2. 標記每日交易筆數異常分錄 ---
-    ' 門檻值: 交易筆數 > 2
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 2.2. 標記筆數異常分錄(同一天):" & vbCrLf & _
-                "FROM [deposit_credit], [date_counterparty_count] INTO [day_error_count]"
-    sql = "SELECT [日期], [交易對手帳戶], COUNT(*) AS [同一日同一交易對手交易筆數] " & _
-          "INTO date_counterparty_count " & _
-          "FROM deopsit_credit " & _
+    ' --- 2.2 ─ 標記每日交易筆數異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 標記筆數異常分錄(同一天)"
+    Dim day_error_count As String
+    day_error_count = m_JE1 & "_day_error_count"
+    DropExist (day_error_count)
+    
+    Dim dailyCountLimit As String
+    dailyCountLimit = "2"
+    
+    sql = "SELECT * " & vbCrLf & _
+          "INTO [" & day_error_count & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.*, " & vbCrLf & _
+          "        t2.[同一日同一交易對手交易筆數], " & vbCrLf & _
+          "        IIF(" & vbCrLf & _
+          "            t2.[同一日同一交易對手交易筆數] > " & dailyCountLimit & ", " & vbCrLf & _
+          "            'V', " & vbCrLf & _
+          "            ''" & vbCrLf & _
+          "        ) AS [超過筆數門檻之異常分錄_日] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        LEFT JOIN [" & date_counterparty_count & "] AS t2 ON (t1.[交易對手帳戶] = t2.[交易對手帳戶]) " & vbCrLf & _
+          "        AND (t1.[日期] = t2.[日期])" & vbCrLf & _
+          ") AS A " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    [超過筆數門檻之異常分錄_日] = 'V';"
+    m_dal.ExecuteSQL sql
+    
+    ' --- 3.1 ─ 計算每日各交易對手總交易金額 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 同一日同一交易對手交易金額"
+    Dim date_counterparty_sum As String
+    date_counterparty_sum = m_JE1 & "_date_counterparty_sum"
+    DropExist (date_counterparty_sum)
+    
+    sql = "SELECT [日期], [交易對手帳戶], SUM([本幣貸方金額]) " & _
+          "AS [同一日同一交易對手交易金額]" & _
+          "INTO [" & date_counterparty_sum & "] " & _
+          "FROM [" & deposit_credit & "]" & _
           "GROUP BY [日期], [交易對手帳戶];"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 3.1. 計算每日各交易對手總交易金額 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 3.1. 同一日同一交易對手交易金額:" & vbCrLf & _
-                "FROM [deposit_credit] INTO [date_counterparty_sum]"
-    sql = "SELECT [日期], [交易對手帳戶], SUM([本幣貸方金額]) AS [同一日同一交易對手交易金額 ] " & _
-          "INTO date_counterparty_sum " & _
-          "FROM deposit_credit " & _
-          "GROUP BY [日期], [交易對手帳戶];"
+    ' --- 3.2 ─ 標記每日交易金額異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 標記金額異常分錄(同一天)"
+    Dim day_error_sum As String
+    day_error_sum = m_JE1 & "_day_error_sum"
+    DropExist (day_error_sum)
+    
+    Dim dailyAmountLimit As String
+    dailyAmountLimit = "500000"
+    
+    sql = "SELECT * " & vbCrLf & _
+      "INTO [" & day_error_sum & "] " & vbCrLf & _
+      "FROM (" & vbCrLf & _
+      "    SELECT " & vbCrLf & _
+      "        d1.*, " & vbCrLf & _
+      "        t8.[同一日同一交易對手交易金額], " & vbCrLf & _
+      "        IIF(" & vbCrLf & _
+      "            t8.[同一日同一交易對手交易金額] > " & dailyAmountLimit & ", " & vbCrLf & _
+      "            'V', " & vbCrLf & _
+      "            ''" & vbCrLf & _
+      "        ) AS [超過金額門檻之異常分錄_日] " & vbCrLf & _
+      "    FROM " & vbCrLf & _
+      "        [" & deposit_credit & "] AS d1 " & vbCrLf & _
+      "        LEFT JOIN [" & date_counterparty_sum & "] AS t8 ON (d1.[日期] = t8.[日期]) " & vbCrLf & _
+      "        AND (d1.[交易對手帳戶] = t8.[交易對手帳戶])" & vbCrLf & _
+      ") AS A " & vbCrLf & _
+      "WHERE " & vbCrLf & _
+      "    [超過金額門檻之異常分錄_日] = 'V';"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 3.2. 標記每日交易金額異常分錄 ---
-    ' 門檻值: 交易金額 > 500000
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 3.2. 標記金額異常分錄(同一天):" & vbCrLf & _
-                "FROM [deposit_credit], [date_counterparty_sum] INTO [day_error_sum]"
-    sql = "SELECT * INTO day_error_sum " & _
-          "FROM (SELECT d1.*, t8.[同一日同一交易對手交易金額 ], " & _
-          "IIF(t8.[同一日同一交易對手交易金額 ] > 500000, 'V', '') AS 超過金額門檻之異常分錄_日 " & _
-          "FROM deposit_credit AS d1 LEFT JOIN date_counterparty_sum AS t8 " & _
-          "ON (d1.[日期] = t8.[日期]) AND (d1.[交易對手帳戶] = t8.[交易對手帳戶])) AS A " & _
-          "WHERE A.超過金額門檻之異常分錄_日='V';"
-          
+    ' --- 4.1 ─ 產生週滾動時間區間輔助表 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 產出7+2天迴圈"
+    Dim week7plus2cycle As String
+    week7plus2cycle = m_JE1 & "_week7plus2cycle"
+    DropExist (week7plus2cycle)
+    GenerateWeeklyData (week7plus2cycle)
+    
+    ' --- 4.2 ─ 計算週滾動區間交易筆數與金額 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - week7+2_count&sum"
+    Dim week_countandsum As String
+    week_countandsum = m_JE1 & "_week_countandsum"
+    DropExist (week_countandsum)
+    
+    sql = "SELECT * " & vbCrLf & _
+          "INTO [" & week_countandsum & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.[交易對手帳戶], " & vbCrLf & _
+          "        t4.StartDate, " & vbCrLf & _
+          "        t4.EndDate, " & vbCrLf & _
+          "        COUNT(*) AS [連續7日同一交易對手交易筆數], " & vbCrLf & _
+          "        SUM(t1.[本幣貸方金額]) AS [連續7日同一交易對手交易金額] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        INNER JOIN [" & week7plus2cycle & "] AS t4 " & vbCrLf & _
+          "            ON (t1.[日期] >= t4.[StartDate]) AND (t1.[日期] <= t4.[EndDate]) " & vbCrLf & _
+          "    GROUP BY " & vbCrLf & _
+          "        t1.[交易對手帳戶], " & vbCrLf & _
+          "        t4.StartDate, " & vbCrLf & _
+          "        t4.EndDate " & vbCrLf & _
+          ") AS A;"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 4.1. 產生週滾動時間區間輔助表 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 4.1. 產出7+2天迴圈:" & vbCrLf & _
-                "INSERT INTO [week7+2cycle]"
-    sql = "CREATE TABLE [week7+2cycle] (StartDate Date, EndDate Date);"
+    ' --- 4.3 ─ 標記週區間交易筆數異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 標記筆數異常分錄(週)"
+    Dim week_error_count As String
+    week_error_count = m_JE1 & "_week_error_count"
+    DropExist (week_error_count)
+    
+    Dim weeklyCountLimit As String
+    weeklyCountLimit = "10"
+    
+    sql = "SELECT DISTINCT * " & vbCrLf & _
+          "INTO [" & week_error_count & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.*, " & vbCrLf & _
+          "        t5.[連續7日同一交易對手交易筆數], " & vbCrLf & _
+          "        IIF(" & vbCrLf & _
+          "            t5.[連續7日同一交易對手交易筆數] > " & weeklyCountLimit & ", " & vbCrLf & _
+          "            'V', " & vbCrLf & _
+          "            ''" & vbCrLf & _
+          "        ) AS [超過筆數門檻之異常分錄_週] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        LEFT JOIN [" & week_countandsum & "] AS t5 " & vbCrLf & _
+          "            ON (t1.[日期] <= t5.[EndDate]) " & vbCrLf & _
+          "            AND (t1.[日期] >= t5.[StartDate]) " & vbCrLf & _
+          "            AND (t1.[交易對手帳戶] = t5.[交易對手帳戶])" & vbCrLf & _
+          ") AS A " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    [超過筆數門檻之異常分錄_週] = 'V';"
     m_dal.ExecuteSQL sql
     
-    sttDate = #1/1/2024# ' 起始日期
-    num = 0 ' 計數器
-    Do While (DateAdd("d", num, sttDate) <= #12/31/2024#)
-        currentStartDate = DateAdd("d", num, sttDate)
-        currentEndDate = DateAdd("d", num + 8, sttDate) ' 9天區間 (0 到 8 共9天)
-        If currentEndDate > #12/31/2024# And currentStartDate <= #12/31/2024# Then
-             If DateDiff("d", currentStartDate, #12/31/2024#) >= 0 Then
-                currentEndDate = #12/31/2024#
-             Else
-                Exit Do
-             End If
-        ElseIf currentStartDate > #12/31/2024# Then
-            Exit Do
-        End If
-        sql = "INSERT INTO [week7+2cycle] (StartDate, EndDate) " & _
-              "VALUES (#" & Format(currentStartDate, "yyyy-mm-dd") & "#, #" & Format(currentEndDate, "yyyy-mm-dd") & "#);"
-        m_dal.ExecuteSQL sql
-        num = num + 1 ' 每天滾動
-    Loop
     
-    ' --- 步驟 4.2. 計算週滾動區間交易筆數與金額 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " -  4.2. week7+2_count&sum:" & vbCrLf & _
-                "FROM [deposit_credit], [week7+2cycle] INTO [week_countandsum]"
-    sql = "SELECT t1.[交易對手帳戶], t4.StartDate, t4.EndDate, " & _
-          "COUNT(*) AS [連續7日同一交易對手交易筆數 ], " & _
-          "SUM(t1.[本幣貸方金額]) AS [連續7日同一交易對手交易金額 ] " & _
-          "INTO week_countandsum " & _
-          "FROM deposit_credit AS t1 INNER JOIN [week7+2cycle] AS t4 " & _
-          "ON (t1.[日期] >= t4.StartDate) AND (t1.[日期] <= t4.EndDate) " & _
-          "GROUP BY t1.[交易對手帳戶], t4.StartDate, t4.EndDate;"
+    
+    ' --- 4.4 ─ 標記週區間交易金額異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 標記金額異常分錄(週)"
+    Dim week_error_sum As String
+    week_error_sum = m_JE1 & "_week_error_sum"
+    DropExist (week_error_sum)
+    
+    Dim weeklyAmountLimit As String
+    weeklyAmountLimit = "1000000"
+    
+    sql = "SELECT DISTINCT * " & vbCrLf & _
+          "INTO [" & week_error_sum & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.*, " & vbCrLf & _
+          "        t5.[連續7日同一交易對手交易金額], " & vbCrLf & _
+          "        IIF(" & vbCrLf & _
+          "            t5.[連續7日同一交易對手交易金額] > " & weeklyAmountLimit & ", " & vbCrLf & _
+          "            'V', " & vbCrLf & _
+          "            ''" & vbCrLf & _
+          "        ) AS [超過金額門檻之異常分錄_週] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        LEFT JOIN [" & week_countandsum & "] AS t5 " & vbCrLf & _
+          "            ON (t1.[交易對手帳戶] = t5.[交易對手帳戶]) " & vbCrLf & _
+          "            AND (t1.[日期] >= t5.[StartDate]) " & vbCrLf & _
+          "            AND (t1.[日期] <= t5.[EndDate])" & vbCrLf & _
+          ") AS A " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    [超過金額門檻之異常分錄_週] = 'V';"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 4.3. 標記週區間交易筆數異常分錄 ---
-    ' 門檻值: 交易筆數 > 10
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 4.3. 標記筆數異常分錄(週):" & vbCrLf & _
-                "FROM [deposit_credit], [week_countandsum] INTO [week_error_count]"
-    sql = "SELECT DISTINCT A.* INTO week_error_count " & _
-          "FROM (SELECT t1.*, t5.[連續7日同一交易對手交易筆數 ], " & _
-          "IIF(t5.[連續7日同一交易對手交易筆數 ] > 10, 'V', '') AS 超過筆數門檻之異常分錄_週 " & _
-          "FROM deposit_credit AS t1 LEFT JOIN week_countandsum AS t5 " & _
-          "ON (t1.[交易對手帳戶] = t5.[交易對手帳戶]) AND (t1.[日期] >= t5.StartDate) AND (t1.[日期] <= t5.EndDate)) AS A " & _
-          "WHERE A.超過筆數門檻之異常分錄_週='V';"
+    
+    ' --- 5.1 ─ 產生月滾動時間區間輔助表 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 產出30+8天迴圈"
+    Dim month30plus8cycle As String
+    month30plus8cycle = m_JE1 & "_month30plus8cycle"
+    DropExist (month30plus8cycle)
+    GenerateMonthlyData (month30plus8cycle)
+    
+    ' --- 5.2 ─ 計算月滾動區間交易筆數與金額 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - month30+8_count&sum"
+    Dim month_countandsum As String
+    month_countandsum = m_JE1 & "_month_countandsum"
+    DropExist (month_countandsum)
+    
+    sql = "SELECT * " & vbCrLf & _
+          "INTO [" & month_countandsum & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.[交易對手帳戶], " & vbCrLf & _
+          "        t6.StartDate, " & vbCrLf & _
+          "        t6.EndDate, " & vbCrLf & _
+          "        COUNT(*) AS [連續30日同一交易對手交易筆數], " & vbCrLf & _
+          "        SUM(t1.[本幣貸方金額]) AS [連續30日同一交易對手交易金額] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        INNER JOIN [" & month30plus8cycle & "] AS t6 " & vbCrLf & _
+          "            ON (t1.[日期] >= t6.[StartDate]) AND (t1.[日期] <= t6.[EndDate]) " & vbCrLf & _
+          "    GROUP BY " & vbCrLf & _
+          "        t1.[交易對手帳戶], " & vbCrLf & _
+          "        t6.StartDate, " & vbCrLf & _
+          "        t6.EndDate " & vbCrLf & _
+          ") AS A;"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 4.4. 標記週區間交易金額異常分錄 ---
-    ' 門檻值: 交易金額 > 1000000
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 4.4. 標記金額異常分錄(週):" & vbCrLf & _
-                "FROM [deposit_credit], [week_countandsum] INTO [week_error_sum]"
-    sql = "SELECT DISTINCT A.* INTO week_error_sum " & _
-          "FROM (SELECT t1.*, t5.[連續7日同一交易對手交易金額 ], " & _
-          "IIF(t5.[連續7日同一交易對手交易金額 ] > 1000000, 'V', '') AS 超過金額門檻之異常分錄_週 " & _
-          "FROM deposit_credit AS t1 LEFT JOIN week_countandsum AS t5 " & _
-          "ON (t1.[交易對手帳戶] = t5.[交易對手帳戶]) AND (t1.[日期] >= t5.StartDate) AND (t1.[日期] <= t5.EndDate)) AS A " & _
-          "WHERE A.超過金額門檻之異常分錄_週='V';"
+    ' --- 5.3 ─ 標記月區間交易筆數異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 標記筆數異常分錄(月)"
+    Dim month_error_count As String
+    month_error_count = m_JE1 & "_month_error_count"
+    DropExist (month_error_count)
+    
+    Dim monthlyCountLimit As String
+    monthlyCountLimit = "20" ' Define the threshold for monthly count
+    
+    sql = "SELECT DISTINCT * " & vbCrLf & _
+          "INTO [" & month_error_count & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.*, " & vbCrLf & _
+          "        t7.[連續30日同一交易對手交易筆數], " & vbCrLf & _
+          "        IIF(" & vbCrLf & _
+          "            t7.[連續30日同一交易對手交易筆數] > " & monthlyCountLimit & ", " & vbCrLf & _
+          "            'V', " & vbCrLf & _
+          "            ''" & vbCrLf & _
+          "        ) AS [超過筆數門檻之異常分錄_月] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        LEFT JOIN [" & month_countandsum & "] AS t7 " & vbCrLf & _
+          "            ON (t1.[交易對手帳戶] = t7.[交易對手帳戶]) " & vbCrLf & _
+          "            AND (t1.[日期] >= t7.[StartDate]) " & vbCrLf & _
+          "            AND (t1.[日期] <= t7.[EndDate])" & vbCrLf & _
+          ") AS A " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    [超過筆數門檻之異常分錄_月] = 'V';"
     m_dal.ExecuteSQL sql
     
-    ' --- 步驟 5.1. 產生月滾動時間區間輔助表 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 5.1. 產出30+8天迴圈:" & vbCrLf & _
-                "INSERT INTO [month30+8cycle]"
-    sql = "CREATE TABLE [month30+8cycle] (StartDate Date, EndDate Date);"
-    m_dal.ExecuteSQL sql
+    ' --- 5.4 ─ 標記月區間交易金額異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 標記金額異常分錄(月)"
+    Dim month_error_sum As String
+    month_error_sum = m_JE1 & "_month_error_sum"
+    DropExist (month_error_sum)
     
-    sttDate = #1/1/2024# ' 起始日期
-    num = 0 ' 計數器
-    Do While (DateAdd("d", num, sttDate) <= #12/31/2024#)
-        currentStartDate = DateAdd("d", num, sttDate)
-        currentEndDate = DateAdd("d", num + 38, sttDate) ' 39天區間
-        If currentEndDate > #12/31/2024# And currentStartDate <= #12/31/2024# Then
-            If DateDiff("d", currentStartDate, #12/31/2024#) >= 0 Then
-                currentEndDate = #12/31/2024#
-            Else
-                Exit Do
-            End If
-        ElseIf currentStartDate > #12/31/2024# Then
-            Exit Do
-        End If
-        sql = "INSERT INTO [month30+8cycle] (StartDate, EndDate) " & _
-              "VALUES (#" & Format(currentStartDate, "yyyy-mm-dd") & "#, #" & Format(currentEndDate, "yyyy-mm-dd") & "#);"
-        m_dal.ExecuteSQL sql
-        num = num + 1 ' 每天滾動
-    Loop
+    Dim monthlyAmountLimit As String
+    monthlyAmountLimit = "10000000" ' Define the threshold for monthly amount
     
-    ' --- 步驟 5.2. 計算月滾動區間交易筆數與金額 ---
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 5.2. month30+8_count&sum:" & vbCrLf & _
-                "FROM [deposit_credit], [month30+8cycle] INTO [month_countandsum]"
-    sql = "SELECT t1.[交易對手帳戶], t6.StartDate, t6.EndDate, " & _
-          "COUNT(*) AS [連續30日同一交易對手交易筆數 ], " & _
-          "SUM(t1.[本幣貸方金額]) AS [連續30日同一交易對手交易金額 ] " & _
-          "INTO month_countandsum " & _
-          "FROM deposit_credit AS t1 INNER JOIN [month30+8cycle] AS t6 " & _
-          "ON (t1.[日期] >= t6.StartDate) AND (t1.[日期] <= t6.EndDate) " & _
-          "GROUP BY t1.[交易對手帳戶], t6.StartDate, t6.EndDate;"
-    m_dal.ExecuteSQL sql
-    
-    ' --- 步驟 5.3. 標記月區間交易筆數異常分錄 ---
-    ' 門檻值: 交易筆數 > 20
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 5.3. 標記筆數異常分錄(月):" & vbCrLf & _
-                "FROM [deposit_credit], [month_countandsum] INTO [month_error_count]"
-    sql = "SELECT DISTINCT A.* INTO month_error_count " & _
-          "FROM (SELECT t1.*, t7.[連續30日同一交易對手交易筆數 ], " & _
-          "IIF(t7.[連續30日同一交易對手交易筆數 ] > 20, 'V', '') AS 超過筆數門檻之異常分錄_月 " & _
-          "FROM deposit_credit AS t1 LEFT JOIN month_countandsum AS t7 " & _
-          "ON (t1.[交易對手帳戶] = t7.[交易對手帳戶]) AND (t1.[日期] >= t7.StartDate) AND (t1.[日期] <= t7.EndDate)) AS A " & _
-          "WHERE A.超過筆數門檻之異常分錄_月='V';"
-    m_dal.ExecuteSQL sql
-    
-    ' --- 步驟 5.4. 標記月區間交易金額異常分錄 ---
-    ' 門檻值: 交易金額 > 10000000
-    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 5.4. 標記金額異常分錄(月):" & vbCrLf & _
-                "FROM [deposit_credit], [month_countandsum] INTO [month_error_sum]"
-    sql = "SELECT DISTINCT A.* INTO month_error_sum " & _
-          "FROM (SELECT t1.*, t7.[連續30日同一交易對手交易金額 ], " & _
-          "IIF(t7.[連續30日同一交易對手交易金額 ] > 10000000, 'V', '') AS 超過金額門檻之異常分錄_月 " & _
-          "FROM deposit_credit AS t1 LEFT JOIN month_countandsum AS t7 " & _
-          "ON (t1.[交易對手帳戶] = t7.[交易對手帳戶]) AND (t1.[日期] >= t7.StartDate) AND (t1.[日期] <= t7.EndDate)) AS A " & _
-          "WHERE A.超過金額門檻之異常分錄_月 = 'V';"
+    sql = "SELECT DISTINCT * " & vbCrLf & _
+          "INTO [" & month_error_sum & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        t1.*, " & vbCrLf & _
+          "        t7.[連續30日同一交易對手交易金額], " & vbCrLf & _
+          "        IIF(" & vbCrLf & _
+          "            t7.[連續30日同一交易對手交易金額] > " & monthlyAmountLimit & ", " & vbCrLf & _
+          "            'V', " & vbCrLf & _
+          "            ''" & vbCrLf & _
+          "        ) AS [超過金額門檻之異常分錄_月] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & deposit_credit & "] AS t1 " & vbCrLf & _
+          "        LEFT JOIN [" & month_countandsum & "] AS t7 " & vbCrLf & _
+          "            ON (t1.[交易對手帳戶] = t7.[交易對手帳戶]) " & vbCrLf & _
+          "            AND (t1.[日期] >= t7.[StartDate]) " & vbCrLf & _
+          "            AND (t1.[日期] <= t7.[EndDate])" & vbCrLf & _
+          ") AS A " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    [超過金額門檻之異常分錄_月] = 'V';"
     m_dal.ExecuteSQL sql
     
     ' Execute procedure... end
     
     MsgBox "Scenario 1 執行完畢。", vbInformation
-    'success = True
+    success = True
     m_dal.Disconnect
     ExecuteScenario1 = success
 
@@ -261,10 +377,22 @@ ErrorHandler:
     
 End Function
 
+
+
 Public Function ExecuteScenario2()
-    ' 單筆大額款項拆分成多筆小金額款項
+    ' --- 篩選條件2 : 將單筆大額款項拆分成多筆小金額款項進行交易 ---
+    '
+    '  特徵:
+    '    - 若公司內規規定超過特定金額之大額交易需要特定主管簽名核准，可能透過將大額款項拆分成小筆金額多次交易的方式規避內部控制以進行舞弊。
+    '  假設:
+    '    1. 根據審計員輸入要檢驗的會計科目 (通常在費用的雜項) 篩出 「會計科目」欄位包含這些會計科目之所有分錄
+    '    2. 統計科目拆成相同金額的 (1)分錄有幾筆 or (2)當年累積金額，並視覺化以排名呈現
+    '    3. 根據審計員輸入之門檻值，判斷當年之分錄比數/金額是否超過門檻值
+    '    4. 超過門檻值者，回報為異常分錄
+    
     Const METHOD_NAME As String = "ExecuteScenario2"
     Dim success As Boolean
+    success = False
     
     If Not m_dal.Connect Then
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: 無法連接到案例資料庫: " & m_dal.DatabasePath
@@ -272,20 +400,183 @@ Public Function ExecuteScenario2()
     End If '若無例外則連接成功
     
     ' Execute procedure... start
+    Dim sql As String
+    Dim tableToDrop As Variant
+    Dim tbl As Variant
+    
+    On Error GoTo ErrorHandler
+    
+    ' --- 1-1 ─ 重複金額抽取（全科目） ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 1-1_same_amount_for_all_account"
+    Dim same_amount_for_all_account As String
+    same_amount_for_all_account = m_JE2 & "_same_amount_for_all_account"
+    DropExist (same_amount_for_all_account)
+    
+    sql = "SELECT A.[會計科目], A.[本幣借方金額], A.[日期] " & _
+          "INTO [" & same_amount_for_all_account & "] " & _
+          "FROM [" & m_JE2 & "] AS A " & _
+          "WHERE A.[本幣借方金額] > 0 " & _
+          "AND A.[本幣借方金額] IN ( " & _
+          "  SELECT [本幣借方金額]" & _
+          "  FROM [" & m_JE2 & "]" & _
+          "  WHERE [會計科目] = A.[會計科目]" & _
+          "  AND [本幣借方金額] > 0" & _
+          "  GROUP BY [本幣借方金額]" & _
+          "  HAVING COUNT(*) > 1" & _
+          ") " & _
+          "ORDER BY A.[會計科目], A.[本幣借方金額], A.[日期];"
+    m_dal.ExecuteSQL sql
+    
+    ' --- 1-2 ─ 重複金額抽取（指定科目） ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 1-2_same_amount_for_selected_account"
+    Dim same_amount_for_selected_account As String
+    Dim 會計科目Group As String
+    會計科目Group = m_JE2 & "_會計科目Group"
+    same_amount_for_selected_account = m_JE2 & "_same_amount_for_selected_account"
+    DropExist (same_amount_for_selected_account)
+    
+    sql = "SELECT A.[會計科目], A.[本幣借方金額], A.[日期] " & _
+          "INTO [" & same_amount_for_selected_account & "] " & _
+          "FROM [" & m_JE2 & "] AS A " & _
+          "WHERE A.[本幣借方金額] > 0 " & _
+          "AND A.[會計科目] IN ( SELECT [會計科目] FROM [" & 會計科目Group & "])  " & _
+          "AND A.[本幣借方金額] IN ( " & _
+          "  SELECT [本幣借方金額] " & _
+          "  FROM [" & m_JE2 & "] " & _
+          "  WHERE [會計科目] = A.[會計科目]" & _
+          "  AND [本幣借方金額] > 0 " & _
+          "  GROUP BY [本幣借方金額] " & _
+          "  HAVING COUNT(*) > 1 " & _
+          ") " & _
+          "ORDER BY A.[會計科目], A.[本幣借方金額], A.[日期];"
+    m_dal.ExecuteSQL sql
+    
+    ' --- 2-1 ─ 金額異常偵測（dollar err） ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 2-1_dollar_err"
+    Dim dollar_err As String
+    dollar_err = m_JE2 & "_dollar_err"
+    DropExist (dollar_err)
+    
+    Dim amount_limit As String
+    amount_limit = "50000000"
+    
+    sql = "SELECT * INTO [" & dollar_err & "] " & _
+          "FROM [" & same_amount_for_selected_account & "] " & _
+          "WHERE [會計科目] IN (" & _
+          "  SELECT 會計科目" & _
+          "  FROM [" & same_amount_for_selected_account & "] " & _
+          "  GROUP BY [會計科目], YEAR(日期) " & _
+          "  HAVING SUM([本幣借方金額]) > " & amount_limit & " " & _
+          ") " & _
+          "ORDER BY [會計科目], [本幣借方金額], [日期];"
+    m_dal.ExecuteSQL sql
+    
+    ' --- 2-2 ─ 筆數異常偵測（frequency_err） ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 2-2_frequency_err"
+    Dim frequency_err As String
+    frequency_err = m_JE2 & "_frequency_err"
+    DropExist (frequency_err)
+    
+    Dim frequency_limit As String
+    frequency_limit = "20"
+    
+    sql = "SELECT * INTO [" & frequency_err & "] " & vbCrLf & _
+          "FROM [" & same_amount_for_selected_account & "] " & vbCrLf & _
+          "WHERE [會計科目] IN ( " & vbCrLf & _
+          "  SELECT [會計科目] " & vbCrLf & _
+          "  FROM [" & same_amount_for_selected_account & "] " & vbCrLf & _
+          "  GROUP BY [會計科目], YEAR(日期) " & vbCrLf & _
+          "  HAVING COUNT(*) > " & frequency_limit & " " & vbCrLf & _
+          ") " & vbCrLf & _
+          "ORDER BY [會計科目], [本幣借方金額], [日期];"
+    m_dal.ExecuteSQL sql
+    
+    ' --- 3-1 ─ 異常旗標合併（金額） ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 3-1_明細帳_2_dollar_err"
+    Dim full_dollar_err As String
+    full_dollar_err = m_JE2 & "_full_dollar_err"
+    DropExist (full_dollar_err)
+    
+    sql = "SELECT DISTINCT * INTO [" & full_dollar_err & "] " & vbCrLf & _
+          "FROM ( " & vbCrLf & _
+          "  SELECT A.*, " & vbCrLf & _
+          "  IIf( " & vbCrLf & _
+          "    B.[會計科目] IS NOT NULL AND " & vbCrLf & _
+          "    B.[本幣借方金額] IS NOT NULL AND " & vbCrLf & _
+          "    B.[日期] IS NOT NULL, " & vbCrLf & _
+          "    'V', '' " & vbCrLf & _
+          "  ) AS error " & vbCrLf & _
+          "  FROM [" & m_JE2 & "] AS A " & vbCrLf & _
+          "    LEFT JOIN [" & dollar_err & "] AS B " & vbCrLf & _
+          "    ON (A.[會計科目] = B.[會計科目]) " & vbCrLf & _
+          "    AND (A.[本幣借方金額] = B.[本幣借方金額]) " & vbCrLf & _
+          "    AND (A.[日期] = B.[日期]) " & vbCrLf & _
+          ") AS [SubQueryAlias];"
+    m_dal.ExecuteSQL sql
+    
+    ' --- 3-2 ─ 異常旗標合併（筆數） ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 3-2_明細帳_2_frequency_err"
+    Dim full_frequency_err As String
+    full_frequency_err = m_JE2 & "_full_frequency_err"
+    DropExist (full_frequency_err)
+    
+    sql = "SELECT DISTINCT * INTO [" & full_frequency_err & "] " & vbCrLf & _
+          "FROM ( " & vbCrLf & _
+          "  SELECT A.*, " & vbCrLf & _
+          "  IIf(" & vbCrLf & _
+          "    B.[會計科目] IS NOT NULL AND " & vbCrLf & _
+          "    B.[本幣借方金額] IS NOT NULL AND " & vbCrLf & _
+          "    B.[日期] IS NOT NULL," & vbCrLf & _
+          "    'V', '' " & vbCrLf & _
+          "  ) AS error " & vbCrLf & _
+          "  FROM [" & m_JE2 & "] AS A " & vbCrLf & _
+          "  LEFT JOIN [" & frequency_err & "] AS B" & vbCrLf & _
+          "  ON (A.[會計科目] = B.[會計科目]) " & vbCrLf & _
+          "  AND (A.[本幣借方金額] = B.[本幣借方金額]) " & vbCrLf & _
+          "  AND (A.[日期] = B.[日期])" & vbCrLf & _
+          ") AS [SubQueryAlias];"
+    m_dal.ExecuteSQL sql
     
     ' Execute procedure... end
     
     MsgBox "Scenario 2 執行完畢。", vbInformation
-    'success = True
+    success = True
     m_dal.Disconnect
-    ExecuteScenario1 = success
+    ExecuteScenario2 = success
+    
+Cleanup:
+    If Not m_dal Is Nothing Then
+        If m_dal.IsConnected() Then
+            m_dal.Disconnect
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料庫連接已斷開。"
+        End If
+    End If
+    ExecuteScenario2 = success
+    Exit Function
+
+ErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & " - SQL: " & sql
+    Debug.Print "錯誤碼 " & Err.Number & ", 描述: " & Err.Description
+    Resume Cleanup ' 跳至清理程序以斷開連接並退出
     
 End Function
 
 Public Function ExecuteScenario3()
-    ' 涉及外幣交易
+    ' --- 篩選條件3 : 涉及外幣之交易分錄 ---
+    '
+    '  特徵:
+    '    - 使用與央行或公開市場明顯不符的匯率，或是同一時期不同交易適用不同匯率，利用匯兌損益操縱財報
+    '    - 利用外幣付款給實質不存在或關係密切之供應商以掩蓋資金挪用行為
+    '  假設:
+    '    1. 「匯率」欄位先篩值不為「0.00000」之所有分錄
+    '    2. VB從明細表抓「傳票日期」、「原幣別」、「匯率」欄位，與台銀匯率交叉比對，判斷明細表所使用匯率是否合理
+    '    3. 若匯率有差異，計算兩匯率下「傳票金額」差多少
+    '    4. 根據審計員輸入之門檻值，判斷該差異是否超過門檻值
+    '    5. 超過門檻值者，回報為異常分錄
+    
     Const METHOD_NAME As String = "ExecuteScenario3"
     Dim success As Boolean
+    success = False
     
     If Not m_dal.Connect Then
         Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: 無法連接到案例資料庫: " & m_dal.DatabasePath
@@ -293,13 +584,282 @@ Public Function ExecuteScenario3()
     End If '若無例外則連接成功
     
     ' Execute procedure... start
+    Dim tableToDrop As Variant
+    Dim tbl As Variant
+    Dim sql As String
+    
+    On Error GoTo ErrorHandler
+    
+    ' --- 1 ─ 爬蟲-台銀匯率 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 爬蟲-台銀匯率"
+    Dim ExchangeRates As String
+    ExchangeRates = "ExchangeRates"
+    DropExist (ExchangeRates)
+    
+    If Not ScrapeExchangeRates(ExchangeRates) Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: ScrapeExchangeRates 失敗。"
+        GoTo Cleanup ' Or Exit Function if no further cleanup needed before disconnect
+    End If
+    
+    
+    ' --- 2 ─ 整合正確匯率至明細帳 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 將正確匯率及明細帳統整為新表"
+    sql = "" & _
+          ""
+    
+    ' --- 3 ─ 計算匯率差異金額及比率 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 計算借貸方差異金額及比率"
+    sql = "" & _
+          ""
+    
+    ' --- 4 ─ 篩選匯率差異超標分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 再篩選差異金額超過門檻之列"
+    sql = "" & _
+          ""
+    
+    ' --- 5 ─ 標記並列出所有匯率異常分錄 ---
+    Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 併入明細帳並列出所有異常分錄"
+    sql = "" & _
+          ""
     
     ' Execute procedure... end
     
     MsgBox "Scenario 3 執行完畢。", vbInformation
     'success = True
     m_dal.Disconnect
-    ExecuteScenario1 = success
-    
+    ExecuteScenario3 = success
+
+Cleanup:
+    If Not m_dal Is Nothing Then
+        If m_dal.IsConnected() Then
+            m_dal.Disconnect
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料庫連接已斷開。"
+        End If
+    End If
+    ExecuteScenario3 = success
+    Exit Function
+
+ErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME
+    If sql <> "" Then
+        Debug.Print "錯誤 SQL (或 SQL 描述): " & sql
+    End If
+    Debug.Print "錯誤碼 " & Err.Number & ", 描述: " & Err.Description
+    success = False
+    Resume Cleanup
 End Function
+
+Private Sub DropExist(ByVal table As String)
+    If m_dal.tableExists(table) Then
+        Debug.Print MODULE_NAME & " - " & table & " 已存在，將其刪除。"
+        m_dal.DropTable table
+    Else
+        Debug.Print MODULE_NAME & " - " & table & " 不存在，無須刪除。"
+    End If
     
+End Sub
+
+Private Sub GenerateWeeklyData(ByVal tableName As String)
+    Const METHOD_NAME As String = "GenerateWeeklyData"
+    Dim sql As String
+    Dim sttDate As Date
+    Dim endDate As Date
+    Dim currentStartDate As Date
+    Dim currentEndDate As Date
+    Dim num As Integer
+    
+    On Error GoTo ErrorHandler
+    
+    If Not m_dal.tableExists(tableName) Then
+        sql = "CREATE TABLE " & tableName & " (StartDate DATETIME, EndDate DATETIME)"
+        m_dal.ExecuteSQL sql
+    End If
+    
+    sttDate = #1/1/2024#
+    endDate = #12/31/2024#
+    num = 0
+    m_dal.EnableDebugPrinting = False
+    
+    Do While (DateAdd("d", num, sttDate) <= endDate) ' 當前範圍未超過結束日期
+        currentStartDate = DateAdd("d", num, sttDate) ' 起始日期
+        currentEndDate = DateAdd("d", num + 8, sttDate) ' 結束日期 (9天後)
+        ' 插入查詢：每次插入9天的範圍
+        sql = "INSERT INTO [" & tableName & "] (StartDate, EndDate) " & _
+              "SELECT #" & Format(currentStartDate, "yyyy-mm-dd") & "# AS StartDate, " & _
+              "#" & Format(currentEndDate, "yyyy-mm-dd") & "# AS EndDate"
+        m_dal.ExecuteSQL sql
+        num = num + 1
+    Loop
+    
+    m_dal.EnableDebugPrinting = True
+    MsgBox "資料已成功插入 " & tableName & "！"
+    
+Cleanup:
+    Exit Sub
+
+ErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & ": " & Err.Description
+    MsgBox "在 " & METHOD_NAME & " 中發生錯誤: " & Err.Description, vbCritical
+    GoTo Cleanup
+
+End Sub
+
+Private Sub GenerateMonthlyData(ByVal tableName As String)
+    Const METHOD_NAME As String = "GenerateMonthlyData"
+    Dim sql As String
+    Dim sttDate As Date
+    Dim endDate As Date
+    Dim currentStartDate As Date
+    Dim currentEndDate As Date
+    Dim num As Integer
+    
+    On Error GoTo ErrorHandler
+    
+    If Not m_dal.tableExists(tableName) Then
+        sql = "CREATE TABLE " & tableName & " (StartDate DATETIME, EndDate DATETIME)"
+        m_dal.ExecuteSQL sql
+    End If
+    
+    sttDate = #1/1/2024#
+    endDate = #12/31/2024#
+    num = 0
+    m_dal.EnableDebugPrinting = False
+    
+    Do While (DateAdd("d", num, sttDate) <= endDate) ' 當前範圍未超過結束日期
+        currentStartDate = DateAdd("d", num, sttDate) ' 起始日期
+        currentEndDate = DateAdd("d", num + 37, sttDate) ' 結束日期 (39天後)
+        ' 插入查詢：每次插入38天的範圍
+        sql = "INSERT INTO [" & tableName & "] (StartDate, EndDate) " & _
+              "SELECT #" & Format(currentStartDate, "yyyy-mm-dd") & "# AS StartDate, " & _
+              "#" & Format(currentEndDate, "yyyy-mm-dd") & "# AS EndDate"
+        m_dal.ExecuteSQL sql
+        num = num + 1
+    Loop
+    
+    m_dal.EnableDebugPrinting = True
+    MsgBox "資料已成功插入 " & tableName & "！"
+    
+Cleanup:
+    Exit Sub
+
+ErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME & ": " & Err.Description
+    MsgBox "在 " & METHOD_NAME & " 中發生錯誤: " & Err.Description, vbCritical
+    GoTo Cleanup
+
+End Sub
+
+Private Function ScrapeExchangeRates(ByVal tableName As String) As Boolean ' Added "As Boolean"
+    Const METHOD_NAME As String = "ScrapeExchangeRates"
+    Dim xmlHttp As MSXML2.XMLHTTP60
+    Dim html As Object
+    Dim url As String
+    Dim rows As Object
+    Dim startDate As Date, endDate As Date
+    Dim currentDate As Date
+    Dim dateString As String
+    Dim row As Object ' Removed unused 'cell'
+    Dim usdRate As String, cnyRate As String, jpyRate As String
+    Dim formattedDate As String
+    Dim exists As Long ' DCount returns Long
+    Dim insertSQL As String, updateSQL As String
+    Dim sqlForErrorContext As String ' For better error reporting
+
+    On Error GoTo ScrapeErrorHandler ' Use a centralized error handler
+    ScrapeExchangeRates = False ' Default to failure
+
+    Set xmlHttp = New MSXML2.XMLHTTP60
+    
+    startDate = DateSerial(2024, 1, 1)
+    endDate = DateSerial(2024, 12, 31) ' Adjust for testing if needed
+    currentDate = startDate
+
+    Do While currentDate <= endDate
+        dateString = Format(currentDate, "yyyy-mm-dd")
+        url = "https://rate.bot.com.tw/xrt/all/" & dateString
+        sqlForErrorContext = "Fetching URL: " & url
+
+        xmlHttp.Open "GET", url, False
+        xmlHttp.setRequestHeader "User-Agent", "Mozilla/5.0"
+        xmlHttp.setRequestHeader "Referer", "https://rate.bot.com.tw/xrt/all"
+        xmlHttp.sEnd ' *** CORRECTED to Send ***
+
+        If xmlHttp.status = 200 Then ' *** CORRECTED to Status ***
+            Set html = CreateObject("htmlfile")
+            html.body.innerHTML = xmlHttp.responseText
+            Set rows = html.getElementsByTagName("tr")
+
+            usdRate = ""
+            cnyRate = ""
+            jpyRate = ""
+
+            For Each row In rows
+                If InStr(1, row.innerText, "美金 (USD)", vbTextCompare) > 0 Then
+                    usdRate = Trim(row.getElementsByTagName("td")(3).innerText)
+                ElseIf InStr(1, row.innerText, "人民幣 (CNY)", vbTextCompare) > 0 Then
+                    cnyRate = Trim(row.getElementsByTagName("td")(3).innerText)
+                ElseIf InStr(1, row.innerText, "日圓 (JPY)", vbTextCompare) > 0 Then
+                    jpyRate = Trim(row.getElementsByTagName("td")(3).innerText)
+                End If
+            Next row
+
+            formattedDate = "#" & Format(currentDate, "yyyy-mm-dd") & "#" ' Jet SQL prefers yyyy-mm-dd
+            
+            ' Ensure DCount uses the correct tableName parameter passed to the function
+            ' And ensure Access Object Library is referenced for DCount
+            sqlForErrorContext = "DCount for date: " & formattedDate & " in table " & tableName
+            exists = DCount("*", tableName, "[Date] = " & formattedDate)
+
+            If exists = 0 Then
+                If IsNumeric(usdRate) Or IsNumeric(cnyRate) Or IsNumeric(jpyRate) Then
+                    insertSQL = "INSERT INTO [" & tableName & "] ([Date], USD, CNY, JPY) VALUES (" & _
+                                formattedDate & ", " & Val(Nz(usdRate, "0")) & ", " & Val(Nz(cnyRate, "0")) & ", " & Val(Nz(jpyRate, "0")) & ")"
+                    sqlForErrorContext = insertSQL
+                    Debug.Print "INSERT SQL: " & insertSQL
+                    m_dal.ExecuteSQL insertSQL ' Execute via m_dal
+                End If
+            Else
+                Dim setClauses As String
+                setClauses = ""
+                If IsNumeric(usdRate) Then setClauses = setClauses & "USD = " & Val(usdRate) & ", "
+                If IsNumeric(cnyRate) Then setClauses = setClauses & "CNY = " & Val(cnyRate) & ", "
+                If IsNumeric(jpyRate) Then setClauses = setClauses & "JPY = " & Val(jpyRate) & ", "
+                
+                If Len(setClauses) > 0 Then
+                    setClauses = Left(setClauses, Len(setClauses) - 2) ' Remove trailing comma
+                    updateSQL = "UPDATE [" & tableName & "] SET " & setClauses & " WHERE [Date] = " & formattedDate
+                    sqlForErrorContext = updateSQL
+                    Debug.Print "UPDATE SQL: " & updateSQL
+                    m_dal.ExecuteSQL updateSQL ' Execute via m_dal
+                End If
+            End If
+        Else
+            Debug.Print "Failed to fetch data for " & dateString & ". Status: " & xmlHttp.status
+            ' Consider if this should be a critical error and set ScrapeExchangeRates = False then Exit Function
+        End If
+        
+        sqlForErrorContext = "" ' Clear context
+        currentDate = currentDate + 1
+    Loop
+
+    MsgBox "資料已成功插入/更新 " & tableName & "！"
+    ScrapeExchangeRates = True ' Set to True on successful completion
+    Exit Function
+
+ScrapeErrorHandler:
+    Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME
+    If sqlForErrorContext <> "" Then
+        Debug.Print "錯誤相關資訊: " & sqlForErrorContext
+    End If
+    Debug.Print "錯誤碼 " & Err.Number & ", 描述: " & Err.Description
+    MsgBox "在 " & METHOD_NAME & " 中發生錯誤: " & Err.Description & vbCrLf & "相關資訊: " & sqlForErrorContext, vbCritical
+    ' ScrapeExchangeRates remains False (default value)
+    Exit Function
+
+' Comment out or remove the old InsertErr:
+'InsertErr:
+'    MsgBox "錯誤：" & Err.Description & vbCrLf & "SQL語句：" & insertSQL & updateSQL, vbCritical, "錯誤"
+'    Err.Clear
+'    Resume Next ' Avoid Resume Next
+End Function
+
