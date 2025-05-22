@@ -24,9 +24,12 @@ Public Sub Initialize(ByVal DbPath As String, ByVal je1 As String, ByVal je2 As 
     Set m_dal = New AccessDAL
     m_DbPath = DbPath
     m_dal.DatabasePath = m_DbPath
+    m_dal.EnableDebugPrinting = True
+    
     m_JE1 = je1
     m_JE2 = je2
     m_JE3 = je3
+    
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " 初始化成功。使用資料庫: " & m_DbPath
     
     Exit Sub
@@ -593,39 +596,128 @@ Public Function ExecuteScenario3()
     ' --- 1 ─ 爬蟲-台銀匯率 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 爬蟲-台銀匯率"
     Dim ExchangeRates As String
-    ExchangeRates = "ExchangeRates"
+    ExchangeRates = m_JE3 & "_ExchangeRates"
     DropExist (ExchangeRates)
     
-    If Not ScrapeExchangeRates(ExchangeRates) Then
-        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: ScrapeExchangeRates 失敗。"
-        GoTo Cleanup ' Or Exit Function if no further cleanup needed before disconnect
+    If Not m_dal.tableExists(ExchangeRates) Then
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料表 " & ExchangeRates & " 不存在，開始執行爬蟲。"
+        
+        If Not ScrapeExchangeRates(ExchangeRates) Then
+            Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 錯誤: ScrapeExchangeRates 失敗。"
+            GoTo Cleanup ' Or Exit Function if no further cleanup needed before disconnect
+        End If
+    Else
+        Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 資料表 " & ExchangeRates & " 已存在，跳過爬蟲程序。"
     End If
-    
     
     ' --- 2 ─ 整合正確匯率至明細帳 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 將正確匯率及明細帳統整為新表"
-    sql = "" & _
-          ""
+    Dim ledger_mix_exchange_rate As String
+    ledger_mix_exchange_rate = m_JE3 & "_ledger_mix_exchange_rate"
+    DropExist (ledger_mix_exchange_rate)
+    
+    sql = "SELECT " & vbCrLf & _
+          "    A.*, " & vbCrLf & _
+          "    IIF(A.[幣別]='USD', E.[USD], " & vbCrLf & _
+          "        IIF(A.[幣別]='CNY', E.[CNY], " & vbCrLf & _
+          "            IIF(A.[幣別]='JPY', E.[JPY], NULL)" & vbCrLf & _
+          "        )" & vbCrLf & _
+          "    ) AS CorrectRate " & vbCrLf & _
+          "INTO [" & ledger_mix_exchange_rate & "] " & vbCrLf & _
+          "FROM " & vbCrLf & _
+          "    [" & m_JE3 & "] AS A " & vbCrLf & _
+          "LEFT JOIN " & vbCrLf & _
+          "    [" & ExchangeRates & "] AS E ON A.[日期] = E.[Date];"
+    m_dal.ExecuteSQL sql
     
     ' --- 3 ─ 計算匯率差異金額及比率 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 計算借貸方差異金額及比率"
-    sql = "" & _
-          ""
+    Dim different_amount_and_percentage As String
+    different_amount_and_percentage = m_JE3 & "_different_amount_and_percentage"
+    DropExist (different_amount_and_percentage)
+    
+    sql = "SELECT * " & vbCrLf & _
+          "INTO [" & different_amount_and_percentage & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        A.*, " & vbCrLf & _
+          "        ([匯率] - [CorrectRate]) * [原幣借方金額] AS [借方差異金額], " & vbCrLf & _
+          "        ([匯率] - [CorrectRate]) * [原幣貸方金額] AS [貸方差異金額], " & vbCrLf & _
+          "        IIF(([CorrectRate] IS NOT NULL AND [CorrectRate] <> 0) AND ([原幣借方金額] IS NOT NULL AND [原幣借方金額] <> 0), ([本幣借方金額] / ([CorrectRate] * [原幣借方金額])), NULL) AS [借方差異比率], " & vbCrLf & _
+          "        IIF(([CorrectRate] IS NOT NULL AND [CorrectRate] <> 0) AND ([原幣貸方金額] IS NOT NULL AND [原幣貸方金額] <> 0), ([本幣貸方金額] / ([CorrectRate] * [原幣貸方金額])), NULL) AS [貸方差異比率] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & ledger_mix_exchange_rate & "] AS A" & vbCrLf & _
+          ") AS B;"
+    m_dal.ExecuteSQL sql
     
     ' --- 4 ─ 篩選匯率差異超標分錄 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 再篩選差異金額超過門檻之列"
-    sql = "" & _
-          ""
+    Dim abnormal_list As String
+    abnormal_list = m_JE3 & "_abnormal_list"
+    DropExist (abnormal_list)
+    
+    Dim rateRatioLimit As String
+    rateRatioLimit = "1.1" ' 匯率差異比率門檻值
+    
+    Dim amountDiffLimit As String
+    amountDiffLimit = "7000000" ' 匯率差異金額門檻值
+    
+    sql = "SELECT " & vbCrLf & _
+          "    A.[傳票號碼], " & vbCrLf & _
+          "    A.[日期], " & vbCrLf & _
+          "    A.[匯率], " & vbCrLf & _
+          "    A.[CorrectRate], " & vbCrLf & _
+          "    A.[借方差異金額], " & vbCrLf & _
+          "    A.[貸方差異金額], " & vbCrLf & _
+          "    A.[借方差異比率], " & vbCrLf & _
+          "    A.[貸方差異比率] " & vbCrLf & _
+          "INTO [" & abnormal_list & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        * " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & different_amount_and_percentage & "] AS B " & vbCrLf & _
+          "    WHERE " & vbCrLf & _
+          "        B.[借方差異比率] > " & rateRatioLimit & " OR B.[貸方差異比率] > " & rateRatioLimit & vbCrLf & _
+          ") AS A " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    A.[借方差異金額] > " & amountDiffLimit & " OR A.[貸方差異金額] > " & amountDiffLimit & ";"
+    m_dal.ExecuteSQL sql
     
     ' --- 5 ─ 標記並列出所有匯率異常分錄 ---
     Debug.Print MODULE_NAME & "." & METHOD_NAME & " - 併入明細帳並列出所有異常分錄"
-    sql = "" & _
-          ""
+    Dim all_abnormal_entry As String
+    all_abnormal_entry = m_JE3 & "_all_abnormal_entry"
+    DropExist (all_abnormal_entry)
+    
+    sql = "SELECT * " & vbCrLf & _
+          "INTO [" & all_abnormal_entry & "] " & vbCrLf & _
+          "FROM (" & vbCrLf & _
+          "    SELECT " & vbCrLf & _
+          "        A.*, " & vbCrLf & _
+          "        IIF(" & vbCrLf & _
+          "            A.[傳票號碼] IN ( " & vbCrLf & _
+          "                SELECT " & vbCrLf & _
+          "                    [傳票號碼] " & vbCrLf & _
+          "                FROM " & vbCrLf & _
+          "                    [" & abnormal_list & "] " & vbCrLf & _
+          "            ), " & vbCrLf & _
+          "            'V', " & vbCrLf & _
+          "            ''" & vbCrLf & _
+          "        ) AS [超過金額門檻之異常分錄] " & vbCrLf & _
+          "    FROM " & vbCrLf & _
+          "        [" & different_amount_and_percentage & "] AS A " & vbCrLf & _
+          "        LEFT JOIN [" & abnormal_list & "] AS B " & vbCrLf & _
+          "            ON (A.[借方差異金額] = B.[借方差異金額]) AND (A.[傳票號碼] = B.[傳票號碼])" & vbCrLf & _
+          ") AS T " & vbCrLf & _
+          "WHERE " & vbCrLf & _
+          "    T.[超過金額門檻之異常分錄] = 'V';"
+    m_dal.ExecuteSQL sql
     
     ' Execute procedure... end
     
     MsgBox "Scenario 3 執行完畢。", vbInformation
-    'success = True
+    success = True
     m_dal.Disconnect
     ExecuteScenario3 = success
 
@@ -749,7 +841,7 @@ ErrorHandler:
 
 End Sub
 
-Private Function ScrapeExchangeRates(ByVal tableName As String) As Boolean ' Added "As Boolean"
+Private Function ScrapeExchangeRates(ByVal tableName As String) As Boolean
     Const METHOD_NAME As String = "ScrapeExchangeRates"
     Dim xmlHttp As MSXML2.XMLHTTP60
     Dim html As Object
@@ -758,37 +850,57 @@ Private Function ScrapeExchangeRates(ByVal tableName As String) As Boolean ' Add
     Dim startDate As Date, endDate As Date
     Dim currentDate As Date
     Dim dateString As String
-    Dim row As Object ' Removed unused 'cell'
+    Dim row As Object
     Dim usdRate As String, cnyRate As String, jpyRate As String
     Dim formattedDate As String
-    Dim exists As Long ' DCount returns Long
+    Dim recordsFound As Long
     Dim insertSQL As String, updateSQL As String
-    Dim sqlForErrorContext As String ' For better error reporting
+    Dim createTableSQL As String
+    Dim sqlForErrorContext As String
 
-    On Error GoTo ScrapeErrorHandler ' Use a centralized error handler
+    On Error GoTo ScrapeErrorHandler
     ScrapeExchangeRates = False ' Default to failure
 
     Set xmlHttp = New MSXML2.XMLHTTP60
     
     startDate = DateSerial(2024, 1, 1)
     endDate = DateSerial(2024, 12, 31) ' Adjust for testing if needed
-    currentDate = startDate
+    
+    ' --- Ensure table exists before starting the loop ---
+    sqlForErrorContext = "Checking/Creating table: " & tableName
+    If Not m_dal.tableExists(tableName) Then
+        Debug.Print METHOD_NAME & " - Table " & tableName & " does not exist. Creating it."
+        createTableSQL = "CREATE TABLE [" & tableName & "] (" & _
+                         "[Date] DATETIME PRIMARY KEY, " & _
+                         "USD NUMBER, " & _
+                         "CNY NUMBER, " & _
+                         "JPY NUMBER);"
+        sqlForErrorContext = createTableSQL
+        m_dal.ExecuteSQL createTableSQL
+        Debug.Print METHOD_NAME & " - Table " & tableName & " created successfully."
+    Else
+        Debug.Print METHOD_NAME & " - Table " & tableName & " already exists."
+    End If
+    sqlForErrorContext = "" ' Clear context
 
+    currentDate = startDate
     Do While currentDate <= endDate
-        dateString = Format(currentDate, "yyyy-mm-dd")
+        dateString = Format(currentDate, "yyyy-mm-dd") ' URL format
         url = "https://rate.bot.com.tw/xrt/all/" & dateString
         sqlForErrorContext = "Fetching URL: " & url
+        Debug.Print METHOD_NAME & " - Fetching data for: " & dateString
 
         xmlHttp.Open "GET", url, False
         xmlHttp.setRequestHeader "User-Agent", "Mozilla/5.0"
         xmlHttp.setRequestHeader "Referer", "https://rate.bot.com.tw/xrt/all"
-        xmlHttp.sEnd ' *** CORRECTED to Send ***
+        xmlHttp.sEnd ' Corrected from sEnd
 
-        If xmlHttp.status = 200 Then ' *** CORRECTED to Status ***
+        If xmlHttp.status = 200 Then ' Standard casing for Status
             Set html = CreateObject("htmlfile")
             html.body.innerHTML = xmlHttp.responseText
             Set rows = html.getElementsByTagName("tr")
 
+            ' Initialize rates for the current date
             usdRate = ""
             cnyRate = ""
             jpyRate = ""
@@ -803,22 +915,39 @@ Private Function ScrapeExchangeRates(ByVal tableName As String) As Boolean ' Add
                 End If
             Next row
 
-            formattedDate = "#" & Format(currentDate, "yyyy-mm-dd") & "#" ' Jet SQL prefers yyyy-mm-dd
+            formattedDate = "#" & Format(currentDate, "yyyy-mm-dd") & "#"
             
-            ' Ensure DCount uses the correct tableName parameter passed to the function
-            ' And ensure Access Object Library is referenced for DCount
-            sqlForErrorContext = "DCount for date: " & formattedDate & " in table " & tableName
-            exists = DCount("*", tableName, "[Date] = " & formattedDate)
+            ' Check if record for the date exists using m_dal.GetScalar
+            Dim scalarSQL As String
+            scalarSQL = "SELECT COUNT(*) FROM [" & tableName & "] WHERE [Date] = " & formattedDate
+            sqlForErrorContext = "Checking record existence with GetScalar: " & scalarSQL
+            Dim countResult As Variant
+            countResult = m_dal.GetScalar(scalarSQL)
 
-            If exists = 0 Then
+            recordsFound = 0 ' Default to 0 if GetScalar fails or returns Null/Error
+            If Not IsError(countResult) And Not IsNull(countResult) Then
+                If IsNumeric(countResult) Then
+                    recordsFound = CLng(countResult)
+                End If
+            ElseIf IsError(countResult) Then
+                ' GetScalar would have raised its own error, which should be caught by ScrapeErrorHandler.
+                ' This is an additional check or logging point if needed.
+                Debug.Print METHOD_NAME & " - Error from GetScalar for SQL (" & scalarSQL & "): " & CVErr(countResult)
+                ' Optionally re-raise or handle, but GetScalar's own Err.Raise should propagate.
+            End If
+            sqlForErrorContext = "" ' Clear scalarSQL context
+
+            If recordsFound = 0 Then ' Record does not exist, so INSERT
                 If IsNumeric(usdRate) Or IsNumeric(cnyRate) Or IsNumeric(jpyRate) Then
                     insertSQL = "INSERT INTO [" & tableName & "] ([Date], USD, CNY, JPY) VALUES (" & _
                                 formattedDate & ", " & Val(Nz(usdRate, "0")) & ", " & Val(Nz(cnyRate, "0")) & ", " & Val(Nz(jpyRate, "0")) & ")"
                     sqlForErrorContext = insertSQL
                     Debug.Print "INSERT SQL: " & insertSQL
-                    m_dal.ExecuteSQL insertSQL ' Execute via m_dal
+                    m_dal.ExecuteSQL insertSQL
+                Else
+                    Debug.Print METHOD_NAME & " - No numeric rates found for " & dateString & " to insert."
                 End If
-            Else
+            Else ' Record exists, so UPDATE
                 Dim setClauses As String
                 setClauses = ""
                 If IsNumeric(usdRate) Then setClauses = setClauses & "USD = " & Val(usdRate) & ", "
@@ -826,40 +955,46 @@ Private Function ScrapeExchangeRates(ByVal tableName As String) As Boolean ' Add
                 If IsNumeric(jpyRate) Then setClauses = setClauses & "JPY = " & Val(jpyRate) & ", "
                 
                 If Len(setClauses) > 0 Then
-                    setClauses = Left(setClauses, Len(setClauses) - 2) ' Remove trailing comma
+                    setClauses = Left(setClauses, Len(setClauses) - 2) ' Remove trailing comma and space
                     updateSQL = "UPDATE [" & tableName & "] SET " & setClauses & " WHERE [Date] = " & formattedDate
                     sqlForErrorContext = updateSQL
                     Debug.Print "UPDATE SQL: " & updateSQL
-                    m_dal.ExecuteSQL updateSQL ' Execute via m_dal
+                    m_dal.ExecuteSQL updateSQL
+                Else
+                     Debug.Print METHOD_NAME & " - No numeric rates found for " & dateString & " to update existing record."
                 End If
             End If
         Else
-            Debug.Print "Failed to fetch data for " & dateString & ". Status: " & xmlHttp.status
-            ' Consider if this should be a critical error and set ScrapeExchangeRates = False then Exit Function
+            Debug.Print METHOD_NAME & " - Failed to fetch data for " & dateString & ". Status: " & xmlHttp.status
         End If
         
-        sqlForErrorContext = "" ' Clear context
+        sqlForErrorContext = "" ' Clear context for next iteration
         currentDate = currentDate + 1
+        ' DoEvents ' Optional: to keep Excel responsive during long loops
     Loop
 
-    MsgBox "資料已成功插入/更新 " & tableName & "！"
+    MsgBox "匯率資料已成功插入/更新至資料表 '" & tableName & "'！", vbInformation
     ScrapeExchangeRates = True ' Set to True on successful completion
+    
+    Set xmlHttp = Nothing
+    Set html = Nothing
+    Set rows = Nothing
+    Set row = Nothing
     Exit Function
 
 ScrapeErrorHandler:
     Debug.Print "錯誤於 " & MODULE_NAME & "." & METHOD_NAME
     If sqlForErrorContext <> "" Then
-        Debug.Print "錯誤相關資訊: " & sqlForErrorContext
+        Debug.Print "錯誤相關資訊 (SQL 或步驟): " & sqlForErrorContext
     End If
     Debug.Print "錯誤碼 " & Err.Number & ", 描述: " & Err.Description
-    MsgBox "在 " & METHOD_NAME & " 中發生錯誤: " & Err.Description & vbCrLf & "相關資訊: " & sqlForErrorContext, vbCritical
+    MsgBox "在 " & METHOD_NAME & " 中發生錯誤：" & vbCrLf & Err.Description & vbCrLf & "相關資訊: " & sqlForErrorContext, vbCritical, "執行錯誤"
     ' ScrapeExchangeRates remains False (default value)
+    Set xmlHttp = Nothing
+    Set html = Nothing
+    Set rows = Nothing
+    Set row = Nothing
     Exit Function
 
-' Comment out or remove the old InsertErr:
-'InsertErr:
-'    MsgBox "錯誤：" & Err.Description & vbCrLf & "SQL語句：" & insertSQL & updateSQL, vbCritical, "錯誤"
-'    Err.Clear
-'    Resume Next ' Avoid Resume Next
 End Function
 
